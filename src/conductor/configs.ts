@@ -15,4 +15,24 @@ export const DEFAULT_CONFIGS: Record<string, ConductorConfig> = {
       { feature: 'centroid', param: 'drift', out: [0.2, 1.5], attack: 0.3, release: 0.6 },
     ],
   },
+  boids: {
+    pulseDecay: 6,
+    mappings: [
+      // Quiet music = tight lazy murmuration; loud = fast and loose.
+      { feature: 'energyPercentile', param: 'cohesion', out: [1.4, 0.5], attack: 0.5, release: 0.5 },
+      { feature: 'level', param: 'speed', in: [0, 0.5], out: [0.5, 2.2], attack: 0.1, release: 0.5 },
+      { feature: 'pulse', param: 'scatter', out: [0, 0.9], curve: 'pow2', attack: 0, release: 0 },
+      { feature: 'level', param: 'brightness', in: [0, 0.5], out: [0.5, 1.8], attack: 0.05, release: 0.3 },
+      { feature: 'treble', param: 'alignment', in: [0, 0.8], out: [1.4, 0.6], attack: 0.2, release: 0.5 },
+    ],
+  },
+  terrain: {
+    pulseDecay: 4,
+    mappings: [
+      { feature: 'bass', param: 'amplitude', out: [1.2, 4.5], curve: 'sqrt', attack: 0.06, release: 0.35 },
+      { feature: 'centroid', param: 'detail', out: [0.05, 1], attack: 0.3, release: 0.6 },
+      { feature: 'level', param: 'scrollSpeed', in: [0, 0.5], out: [0.8, 7], attack: 0.15, release: 0.8 },
+      { feature: 'pulse', param: 'glow', out: [0.5, 2.2], attack: 0, release: 0 },
+    ],
+  },
 };

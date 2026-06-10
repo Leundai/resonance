@@ -25,5 +25,8 @@ export interface VisualScene {
   setParam(name: string, value: number): void;
   init(ctx: SceneContext): Promise<void> | void;
   update(features: FrameFeatures, dt: number): void;
+  setVisible(visible: boolean): void;
+  /** Scenes that want their own framing override the default orbit. */
+  updateCamera?(camera: THREE.PerspectiveCamera, t: number, features: FrameFeatures): void;
   dispose(): void;
 }

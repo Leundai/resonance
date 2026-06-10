@@ -32,6 +32,7 @@ export class ParticleField implements VisualScene {
     brightness: { default: 0.5, min: 0, max: 2.5 },
     pulse: { default: 0, min: 0, max: 1 },
     drift: { default: 0.5, min: 0, max: 2 },
+    fade: { default: 1, min: 0, max: 1 },
   };
 
   private uTime = uniform(0);
@@ -41,6 +42,7 @@ export class ParticleField implements VisualScene {
   private uBrightness = uniform(this.params.brightness.default);
   private uPulse = uniform(this.params.pulse.default);
   private uDrift = uniform(this.params.drift.default);
+  private uFade = uniform(1);
   private uColorA = uniform(color('#4a7cff'));
   private uColorB = uniform(color('#ff5ec4'));
 
@@ -64,6 +66,9 @@ export class ParticleField implements VisualScene {
         break;
       case 'drift':
         this.uDrift.value = value;
+        break;
+      case 'fade':
+        this.uFade.value = value;
         break;
     }
   }
@@ -135,13 +140,13 @@ export class ParticleField implements VisualScene {
     const seedAttr = seeds.toAttribute();
     const speed = velocities.toAttribute().length();
     const mixT = smoothstep(0.0, 1.5, speed).add(seedAttr.mul(0.25)).clamp(0, 1);
-    const brightness = this.uBrightness.add(this.uPulse.mul(0.7));
+    const brightness = this.uBrightness.add(this.uPulse.mul(0.7)).mul(this.uFade);
     material.colorNode = mix(this.uColorA, this.uColorB, mixT).mul(brightness);
 
     const d = uv().distance(0.5);
-    material.opacityNode = smoothstep(0.5, 0.05, d).mul(
-      float(0.25).add(this.uBrightness.mul(0.35)),
-    );
+    material.opacityNode = smoothstep(0.5, 0.05, d)
+      .mul(float(0.25).add(this.uBrightness.mul(0.35)))
+      .mul(this.uFade);
     material.scaleNode = float(0.08)
       .add(seedAttr.mul(0.06))
       .mul(float(1).add(this.uBreathe.mul(1.2)).add(this.uPulse.mul(0.4)));
@@ -154,8 +159,12 @@ export class ParticleField implements VisualScene {
     await ctx.renderer.computeAsync(initCompute);
   }
 
+  setVisible(v: boolean): void {
+    if (this.mesh) this.mesh.visible = v;
+  }
+
   update(_f: FrameFeatures, dt: number): void {
-    if (!this.ctx) return;
+    if (!this.ctx || !this.mesh?.visible) return;
     this.uTime.value += dt;
     this.uDelta.value = Math.min(dt, 1 / 30);
     this.ctx.renderer.compute(this.updateCompute as Parameters<THREE.WebGPURenderer['compute']>[0]);

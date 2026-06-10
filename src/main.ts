@@ -1,11 +1,12 @@
 import * as THREE from 'three/webgpu';
 import { analyzeInWorker, cacheAnalysis, getCachedAnalysis, sha256Hex } from './analysis';
-import { Conductor } from './conductor/conductor';
-import { DEFAULT_CONFIGS } from './conductor/configs';
 import { FilePlayer } from './audio/file-player';
 import type { FrameFeatures } from './audio/features';
+import { Boids } from './scenes/boids';
+import { SceneManager } from './scenes/manager';
 import { ParticleField } from './scenes/particles';
 import type { SceneContext } from './scenes/scene';
+import { Terrain } from './scenes/terrain';
 import type { SongAnalysis } from './types/song-analysis';
 
 const app = document.getElementById('app')!;
@@ -24,6 +25,7 @@ const debugState = {
   time: 0,
   frames: 0,
   onsetCount: 0,
+  sceneName: '',
 };
 (window as unknown as Record<string, unknown>).__resonance = debugState;
 
@@ -67,9 +69,9 @@ async function boot(): Promise<void> {
   camera.position.set(0, 0, 22);
 
   const ctx: SceneContext = { renderer, scene, camera };
-  const particles = new ParticleField();
-  await particles.init(ctx);
-  const conductor = new Conductor(particles, DEFAULT_CONFIGS.particles);
+  const manager = new SceneManager();
+  await manager.init(ctx, [new ParticleField(), new Boids(), new Terrain()]);
+  debugState.sceneName = manager.active.name;
 
   let player: FilePlayer | null = null;
 
@@ -141,6 +143,8 @@ async function boot(): Promise<void> {
       void player.toggle();
       hud.classList.toggle('hidden', player.isPlaying);
     }
+    const digit = Number(e.key);
+    if (digit >= 1 && digit <= 3) manager.switchTo(digit - 1);
   });
 
   let last = performance.now();
@@ -152,19 +156,21 @@ async function boot(): Promise<void> {
     elapsed += dt;
     const features =
       player && player.isPlaying ? player.frame() : idleFeatures(elapsed);
-    conductor.update(features, dt);
-    particles.update(features, dt);
+    manager.update(features, dt);
     debugState.features = features;
     if (features.onset) debugState.onsetCount++;
     debugState.playing = player?.isPlaying ?? false;
     debugState.time = player?.currentTime ?? 0;
     debugState.frames++;
+    debugState.sceneName = manager.active.name;
 
-    // Slow orbital drift; level adds a subtle push-in.
-    const t = elapsed * 0.04;
-    const radius = 22 - features.level * 4;
-    camera.position.set(Math.sin(t) * radius, Math.sin(t * 0.7) * 3, Math.cos(t) * radius);
-    camera.lookAt(0, 0, 0);
+    if (!manager.updateCamera(camera, elapsed, features)) {
+      // Default slow orbit; level adds a subtle push-in.
+      const t = elapsed * 0.04;
+      const radius = 22 - features.level * 4;
+      camera.position.set(Math.sin(t) * radius, Math.sin(t * 0.7) * 3, Math.cos(t) * radius);
+      camera.lookAt(0, 0, 0);
+    }
 
     renderer.render(scene, camera);
   });
