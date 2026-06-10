@@ -185,15 +185,17 @@ export class ParticleField implements VisualScene {
     const speed = velAttr.length();
     const mixT = smoothstep(0.0, 1.5, speed).add(seedAttr.mul(0.25)).clamp(0, 1);
     const brightness = this.uBrightness
-      .add(this.uPulse.mul(0.7))
-      .add(this.uBurst.mul(0.9))
+      .add(this.uPulse.mul(0.4))
+      .add(this.uBurst.mul(0.65))
       .mul(float(1).sub(this.uInhale.mul(0.45)))
       .mul(this.uFade);
-    material.colorNode = mix(this.uColorA, this.uColorB, mixT).mul(brightness);
+    material.colorNode = mix(this.uColorA, this.uColorB, mixT).mul(brightness).mul(0.8);
 
+    // The nebula collapse concentrates sprites into dense streams —
+    // additive stacking blows out fast, so each sprite stays faint.
     const d = uv().distance(0.5);
     material.opacityNode = smoothstep(0.5, 0.05, d)
-      .mul(float(0.1).add(this.uBrightness.mul(0.16)))
+      .mul(float(0.045).add(this.uBrightness.mul(0.08)))
       .mul(this.uFade);
     // Stretch fast particles along their screen-space velocity — slow
     // ones stay soft dots, movers become silky streamlines.
