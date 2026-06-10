@@ -5,6 +5,7 @@ import { Attractor } from './scenes/attractor';
 import { PostStack } from './post/pipeline';
 import { FilePlayer } from './audio/file-player';
 import type { FrameFeatures } from './audio/features';
+import { LiveProvider, type LiveSource } from './audio/live-provider';
 import { Boids } from './scenes/boids';
 import { Fractal } from './scenes/fractal';
 import { SceneManager } from './scenes/manager';
@@ -96,6 +97,28 @@ async function boot(): Promise<void> {
   let trackName = '';
 
   let player: FilePlayer | null = null;
+  let live: LiveProvider | null = null;
+
+  async function toggleLive(source: LiveSource): Promise<void> {
+    if (live?.isPlaying) {
+      live.stop();
+      trackName = '';
+      setStatus('');
+      hud.classList.remove('hidden');
+      return;
+    }
+    try {
+      player?.pause();
+      live ??= new LiveProvider();
+      await live.start(source);
+      trackName = source === 'display' ? 'live · system audio' : 'live · input device';
+      document.title = `resonance — ${trackName}`;
+      hud.classList.add('hidden');
+      setStatus('');
+    } catch (err) {
+      setStatus(`capture failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -180,6 +203,8 @@ async function boot(): Promise<void> {
   });
   window.addEventListener('keydown', (e) => {
     if (e.key === 'o' || e.key === 'O') input.click();
+    if (e.key === 'l' || e.key === 'L') void toggleLive('display');
+    if (e.key === 'm' || e.key === 'M') void toggleLive('mic');
     if (e.code === 'Space' && player) {
       e.preventDefault();
       void player.toggle();
@@ -198,8 +223,11 @@ async function boot(): Promise<void> {
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
     elapsed += dt;
-    const features =
-      player && player.isPlaying ? player.frame() : idleFeatures(elapsed);
+    const features = live?.isPlaying
+      ? live.frame()
+      : player?.isPlaying
+        ? player.frame()
+        : idleFeatures(elapsed);
     manager.update(features, dt);
     debugState.features = features;
     if (features.onset) debugState.onsetCount++;
@@ -221,9 +249,9 @@ async function boot(): Promise<void> {
 
     fpsSmooth += (1 / Math.max(dt, 1e-4) - fpsSmooth) * 0.05;
     panel.update(fpsSmooth, manager.signals);
-    const nowPlaying = trackName
-      ? `${trackName} · ${manager.active.name}${debugState.analysis ? ` · ${debugState.analysis.tempo.bpm} bpm` : ''}`
-      : '';
+    const bpmSuffix =
+      !live?.isPlaying && debugState.analysis ? ` · ${debugState.analysis.tempo.bpm} bpm` : '';
+    const nowPlaying = trackName ? `${trackName} · ${manager.active.name}${bpmSuffix}` : '';
     if (nowPlaying !== lastNowPlaying) {
       nowPlayingEl.textContent = nowPlaying;
       lastNowPlaying = nowPlaying;
