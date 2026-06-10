@@ -318,6 +318,7 @@ async function boot(): Promise<void> {
   let last = performance.now();
   let elapsed = 0;
   let cameraPunch = 0;
+  let attractTimer = 0;
   let fpsSmooth = 60;
   let lastNowPlaying = '';
   renderer.setAnimationLoop(() => {
@@ -338,6 +339,17 @@ async function boot(): Promise<void> {
     debugState.time = player?.currentTime ?? 0;
     debugState.frames++;
     debugState.sceneName = manager.active.name;
+
+    // Attract mode: before any track loads, tour the scene gallery.
+    if (!trackName && !uiLoading) {
+      attractTimer += dt;
+      if (attractTimer > 22) {
+        attractTimer = 0;
+        manager.switchTo((manager.activeIndexValue + 1) % manager.sceneNames.length);
+      }
+    } else {
+      attractTimer = 0;
+    }
 
     // Downbeat camera punch: quick push-in, eased release.
     if (features.downbeat) cameraPunch = 1;
