@@ -41,6 +41,16 @@ export const DEFAULT_CONFIGS: Record<string, ConductorConfig> = {
       { feature: 'drop', param: 'burst', out: [0, 1], attack: 0, release: 0.02 },
     ],
   },
+  attractor: {
+    pulseDecay: 5,
+    mappings: [
+      { feature: 'level', param: 'speed', in: [0, 0.5], out: [0.5, 2.4], attack: 0.1, release: 0.5 },
+      { feature: 'level', param: 'brightness', in: [0, 0.5], out: [0.4, 1.1], attack: 0.05, release: 0.3 },
+      { feature: 'pulse', param: 'pulse', out: [0, 0.8], attack: 0, release: 0 },
+      { feature: 'inhale', param: 'inhale', out: [0, 1], attack: 0, release: 0.05 },
+      { feature: 'drop', param: 'burst', out: [0, 1], attack: 0, release: 0.02 },
+    ],
+  },
   physarum: {
     pulseDecay: 5,
     mappings: [

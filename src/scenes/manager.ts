@@ -64,9 +64,9 @@ export class SceneManager {
     // Two candidates per energy band; prefer whichever isn't already up.
     const band =
       energy > 0.5
-        ? ['boids', 'fractal']
+        ? ['boids', 'fractal', 'attractor']
         : energy > 0.28
-          ? ['particles', 'physarum']
+          ? ['particles', 'attractor', 'physarum']
           : ['terrain', 'physarum'];
     const pick = band.find((n) => n !== this.active.name) ?? band[0];
     const target = this.scenes.findIndex((s) => s.name === pick);

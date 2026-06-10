@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { analyzeInWorker, cacheAnalysis, getCachedAnalysis, sha256Hex } from './analysis';
 import { extractPalette } from './analysis/palette';
+import { Attractor } from './scenes/attractor';
 import { PostStack } from './post/pipeline';
 import { FilePlayer } from './audio/file-player';
 import type { FrameFeatures } from './audio/features';
@@ -83,6 +84,7 @@ async function boot(): Promise<void> {
     new Terrain(),
     new Fractal(),
     new Physarum(),
+    new Attractor(),
   ]);
   debugState.sceneName = manager.active.name;
   const post = new PostStack(renderer, scene, camera);
@@ -168,7 +170,7 @@ async function boot(): Promise<void> {
       hud.classList.toggle('hidden', player.isPlaying);
     }
     const digit = Number(e.key);
-    if (digit >= 1 && digit <= 5) manager.switchTo(digit - 1);
+    if (digit >= 1 && digit <= 6) manager.switchTo(digit - 1);
   });
 
   let last = performance.now();
