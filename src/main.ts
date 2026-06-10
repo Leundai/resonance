@@ -5,6 +5,7 @@ import { PostStack } from './post/pipeline';
 import { FilePlayer } from './audio/file-player';
 import type { FrameFeatures } from './audio/features';
 import { Boids } from './scenes/boids';
+import { Fractal } from './scenes/fractal';
 import { SceneManager } from './scenes/manager';
 import { ParticleField } from './scenes/particles';
 import type { SceneContext } from './scenes/scene';
@@ -75,7 +76,7 @@ async function boot(): Promise<void> {
 
   const ctx: SceneContext = { renderer, scene, camera };
   const manager = new SceneManager();
-  await manager.init(ctx, [new ParticleField(), new Boids(), new Terrain()]);
+  await manager.init(ctx, [new ParticleField(), new Boids(), new Terrain(), new Fractal()]);
   debugState.sceneName = manager.active.name;
   const post = new PostStack(renderer, scene, camera);
 
@@ -160,7 +161,7 @@ async function boot(): Promise<void> {
       hud.classList.toggle('hidden', player.isPlaying);
     }
     const digit = Number(e.key);
-    if (digit >= 1 && digit <= 3) manager.switchTo(digit - 1);
+    if (digit >= 1 && digit <= 4) manager.switchTo(digit - 1);
   });
 
   let last = performance.now();

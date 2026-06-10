@@ -41,4 +41,15 @@ export const DEFAULT_CONFIGS: Record<string, ConductorConfig> = {
       { feature: 'drop', param: 'burst', out: [0, 1], attack: 0, release: 0.02 },
     ],
   },
+  fractal: {
+    pulseDecay: 5,
+    mappings: [
+      { feature: 'centroid', param: 'speed', out: [0.03, 0.22], attack: 0.4, release: 0.8 },
+      { feature: 'bass', param: 'warp', out: [0.74, 0.86], curve: 'sqrt', attack: 0.08, release: 0.4 },
+      { feature: 'level', param: 'brightness', in: [0, 0.5], out: [0.5, 1.3], attack: 0.05, release: 0.3 },
+      { feature: 'pulse', param: 'pulse', out: [0, 1], attack: 0, release: 0 },
+      { feature: 'inhale', param: 'inhale', out: [0, 1], attack: 0, release: 0.05 },
+      { feature: 'drop', param: 'burst', out: [0, 1], attack: 0, release: 0.02 },
+    ],
+  },
 };

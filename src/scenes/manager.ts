@@ -61,8 +61,11 @@ export class SceneManager {
   private onSection(energy: number): void {
     if (this.lastSwitchEnergy >= 0 && Math.abs(energy - this.lastSwitchEnergy) < 0.18) return;
     this.lastSwitchEnergy = energy;
-    const byName = (n: string): number => this.scenes.findIndex((s) => s.name === n);
-    const target = energy > 0.5 ? byName('boids') : energy > 0.28 ? byName('particles') : byName('terrain');
+    // Two candidates per energy band; prefer whichever isn't already up.
+    const band =
+      energy > 0.5 ? ['boids', 'fractal'] : energy > 0.28 ? ['particles', 'fractal'] : ['terrain', 'particles'];
+    const pick = band.find((n) => n !== this.active.name) ?? band[0];
+    const target = this.scenes.findIndex((s) => s.name === pick);
     if (target >= 0) this.switchTo(target);
   }
 
