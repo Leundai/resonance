@@ -13,10 +13,14 @@ import { Physarum } from './scenes/physarum';
 import type { SceneContext } from './scenes/scene';
 import { Terrain } from './scenes/terrain';
 import type { SongAnalysis } from './types/song-analysis';
+import { DevPanel } from './ui/panel';
 
 const app = document.getElementById('app')!;
 const hud = document.getElementById('hud')!;
 const statusEl = document.getElementById('status')!;
+const nowPlayingEl = document.getElementById('now-playing')!;
+const progressWrap = document.getElementById('progress-wrap')!;
+const progressBar = document.getElementById('progress-bar')!;
 
 const IDLE_SPECTRUM = new Float32Array(1024);
 
@@ -88,6 +92,8 @@ async function boot(): Promise<void> {
   ]);
   debugState.sceneName = manager.active.name;
   const post = new PostStack(renderer, scene, camera);
+  const panel = new DevPanel(manager);
+  let trackName = '';
 
   let player: FilePlayer | null = null;
 
@@ -112,9 +118,17 @@ async function boot(): Promise<void> {
       const audioBuffer = await player.load(bytes); // detaches `bytes`
 
       if (!analysis) {
+        progressWrap.classList.add('visible');
+        const stageBase: Record<string, number> = { decoding: 0, curves: 5, beats: 75, sections: 90, palette: 96 };
         analysis = await analyzeInWorker(audioBuffer, hash, (p) => {
-          setStatus(`analyzing — ${p.stage} ${Math.round(('pct' in p ? p.pct : 0) * 100)}%`);
+          const pct = 'pct' in p ? p.pct : 0;
+          const base = stageBase[p.stage] ?? 0;
+          const span = p.stage === 'curves' ? 70 : 8;
+          progressBar.style.width = `${Math.min(99, base + pct * span)}%`;
+          setStatus(`analyzing — ${p.stage}`);
         });
+        progressBar.style.width = '100%';
+        progressWrap.classList.remove('visible');
         // Object URLs don't survive the cache; persist colors only.
         analysis.palette = palette ? { ...palette, coverArtUrl: null } : null;
         await cacheAnalysis(analysis);
@@ -131,7 +145,9 @@ async function boot(): Promise<void> {
       debugState.seek = (sec: number) => player?.seek(sec);
       hud.classList.add('hidden');
       setStatus('');
-      document.title = `resonance — ${file.name.replace(/\.[^.]+$/, '')}`;
+      trackName = file.name.replace(/\.[^.]+$/, '');
+      document.title = `resonance — ${trackName}`;
+      panel.setAnalysis(trackName, analysis);
     } catch (err) {
       setStatus(`failed to load: ${err instanceof Error ? err.message : err}`);
       console.error(err);
@@ -175,6 +191,8 @@ async function boot(): Promise<void> {
 
   let last = performance.now();
   let elapsed = 0;
+  let fpsSmooth = 60;
+  let lastNowPlaying = '';
   renderer.setAnimationLoop(() => {
     const now = performance.now();
     const dt = Math.min((now - last) / 1000, 0.1);
@@ -200,6 +218,17 @@ async function boot(): Promise<void> {
 
     post.update(features, dt, manager.signals);
     debugState.signals = manager.signals;
+
+    fpsSmooth += (1 / Math.max(dt, 1e-4) - fpsSmooth) * 0.05;
+    panel.update(fpsSmooth, manager.signals);
+    const nowPlaying = trackName
+      ? `${trackName} · ${manager.active.name}${debugState.analysis ? ` · ${debugState.analysis.tempo.bpm} bpm` : ''}`
+      : '';
+    if (nowPlaying !== lastNowPlaying) {
+      nowPlayingEl.textContent = nowPlaying;
+      lastNowPlaying = nowPlaying;
+    }
+
     post.render();
   });
 }

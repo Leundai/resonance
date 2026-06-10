@@ -40,6 +40,17 @@ export class SceneManager {
     return this.conductor?.signals ?? { pulse: 0, inhale: 0, drop: 0 };
   }
 
+  get activeIndexValue(): number {
+    return this.activeIndex;
+  }
+
+  setConductorEnabled(on: boolean): void {
+    if (this.conductor) this.conductor.enabled = on;
+  }
+
+  /** Fires after a scene switch completes (for UI rebinding). */
+  onSceneChanged: ((scene: VisualScene) => void) | null = null;
+
   get sceneNames(): string[] {
     return this.scenes.map((s) => s.name);
   }
@@ -84,6 +95,7 @@ export class SceneManager {
         this.active.setVisible(true);
         this.conductor?.setScene(this.active);
         this.conductor?.setConfig(DEFAULT_CONFIGS[this.active.name] ?? { mappings: [] });
+        this.onSceneChanged?.(this.active);
       }
     } else if (this.fade < 1) {
       this.fade = Math.min(1, this.fade + dt / FADE_SEC);

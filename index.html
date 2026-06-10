@@ -50,6 +50,33 @@
         opacity: 0.5;
         min-height: 1em;
       }
+      #progress-wrap {
+        width: 280px;
+        height: 3px;
+        background: rgba(232, 232, 240, 0.12);
+        border-radius: 2px;
+        overflow: hidden;
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      #progress-wrap.visible {
+        opacity: 1;
+      }
+      #progress-bar {
+        height: 100%;
+        width: 0%;
+        background: rgba(178, 158, 255, 0.9);
+        transition: width 0.15s ease;
+      }
+      #now-playing {
+        position: fixed;
+        left: 16px;
+        bottom: 14px;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        opacity: 0.45;
+        pointer-events: none;
+      }
       body.dragging::after {
         content: '';
         position: fixed;
@@ -64,8 +91,10 @@
     <div id="app"></div>
     <div id="hud">
       <div id="drop-hint">drop a song · or press O to open</div>
+      <div id="progress-wrap"><div id="progress-bar"></div></div>
       <div id="status"></div>
     </div>
+    <div id="now-playing"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

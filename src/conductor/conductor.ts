@@ -50,6 +50,10 @@ interface MappingState {
 }
 
 export class Conductor {
+  /** When false, mappings stop writing params (manual tuning mode);
+   *  derived signals keep flowing for the post stack. */
+  enabled = true;
+
   private config: ConductorConfig;
   private scene: VisualScene;
   private state: MappingState[] = [];
@@ -117,6 +121,7 @@ export class Conductor {
     }
     this.drop *= Math.exp(-dt * 3);
 
+    if (!this.enabled) return;
     for (let i = 0; i < this.config.mappings.length; i++) {
       const m = this.config.mappings[i];
       const raw = this.read(f, m.feature);
