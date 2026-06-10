@@ -56,6 +56,11 @@ export class Conductor {
    *  derived signals keep flowing for the post stack. */
   enabled = true;
 
+  /** Global temperament from the song's absolute arousal (0..1).
+   *  Song-relative features can't tell a breakcore track from a ballad —
+   *  this can. High arousal drives every mapping toward its upper range. */
+  intensity = 0.5;
+
   private config: ConductorConfig;
   private scene: VisualScene;
   private state: MappingState[] = [];
@@ -141,6 +146,7 @@ export class Conductor {
       let x = clamp01((raw - inLo) / (inHi - inLo || 1));
       if (m.curve === 'pow2') x *= x;
       else if (m.curve === 'sqrt') x = Math.sqrt(x);
+      x = clamp01(x * (0.65 + this.intensity * 0.7));
       const target = m.out[0] + (m.out[1] - m.out[0]) * x;
 
       const st = this.state[i];

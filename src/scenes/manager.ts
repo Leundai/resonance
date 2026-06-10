@@ -21,6 +21,7 @@ export class SceneManager {
   /** Energy of the section we last switched on. */
   private lastSwitchEnergy = -1;
   private directorPlan: DirectorPlan | null = null;
+  private arousal = 0.5;
 
   async init(ctx: SceneContext, scenes: VisualScene[]): Promise<void> {
     this.scenes = scenes;
@@ -73,6 +74,12 @@ export class SceneManager {
     if (this.conductor) this.conductor.enabled = on;
   }
 
+  /** Absolute song intensity (emotion.arousal) → conductor temperament. */
+  setIntensity(arousal: number): void {
+    this.arousal = arousal;
+    if (this.conductor) this.conductor.intensity = arousal;
+  }
+
   /** Fires after a scene switch completes (for UI rebinding). */
   onSceneChanged: ((scene: VisualScene) => void) | null = null;
 
@@ -106,11 +113,14 @@ export class SceneManager {
     }
     if (this.lastSwitchEnergy >= 0 && Math.abs(energy - this.lastSwitchEnergy) < 0.18) return;
     this.lastSwitchEnergy = energy;
+    // Song-relative energy alone can't see absolute intensity: a flat-loud
+    // breakcore track would idle in the mid band forever. Blend in arousal.
+    const effective = energy * 0.6 + this.arousal * 0.4;
     // Two candidates per energy band; prefer whichever isn't already up.
     const band =
-      energy > 0.5
+      effective > 0.5
         ? ['boids', 'kifs', 'fractal', 'attractor']
-        : energy > 0.28
+        : effective > 0.28
           ? ['particles', 'attractor', 'physarum']
           : ['terrain', 'physarum', 'kifs'];
     const pick = band.find((n) => n !== this.active.name) ?? band[0];

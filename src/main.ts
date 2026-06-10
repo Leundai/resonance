@@ -222,6 +222,7 @@ async function boot(): Promise<void> {
       debugState.analysisMs = performance.now() - t0;
       debugState.analysis = analysis;
       player.attachAnalysis(analysis);
+      manager.setIntensity(analysis.emotion?.arousal ?? 0.5);
       // Cover art wins; otherwise the song's emotion paints the room.
       const effectivePalette =
         palette ?? (analysis.emotion ? emotionPalette(analysis.emotion) : null);
