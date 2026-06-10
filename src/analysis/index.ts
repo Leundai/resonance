@@ -28,17 +28,30 @@ export async function cacheAnalysis(a: SongAnalysis): Promise<void> {
   await (await db()).put('analysis', a, a.contentHash);
 }
 
-/** Mix an AudioBuffer down to mono and analyze it off-thread. */
-export function analyzeInWorker(
+/** Resample to 22050 Hz mono (Beat This! native rate) with proper filtering. */
+async function toMono22k(buffer: AudioBuffer): Promise<Float32Array> {
+  const length = Math.ceil(buffer.duration * 22050);
+  const off = new OfflineAudioContext(1, length, 22050);
+  const src = off.createBufferSource();
+  src.buffer = buffer;
+  src.connect(off.destination);
+  src.start();
+  const rendered = await off.startRendering();
+  return rendered.getChannelData(0);
+}
+
+/**
+ * Analyze off-thread. Resolves with the classical result as soon as it's
+ * ready (playback can start); `onRefined` fires later when the neural
+ * pass lands (or with the same analysis if it was skipped).
+ */
+export async function analyzeInWorker(
   buffer: AudioBuffer,
   contentHash: string,
   onProgress: (p: AnalysisProgress) => void,
+  onRefined: (a: SongAnalysis) => void,
 ): Promise<SongAnalysis> {
-  const mono = new Float32Array(buffer.length);
-  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-    const data = buffer.getChannelData(ch);
-    for (let i = 0; i < data.length; i++) mono[i] += data[i] / buffer.numberOfChannels;
-  }
+  const mono = await toMono22k(buffer);
 
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
@@ -48,8 +61,10 @@ export function analyzeInWorker(
         worker.terminate();
         reject(new Error(msg.message));
       } else if (msg.stage === 'done') {
-        worker.terminate();
         resolve(msg.analysis);
+      } else if (msg.stage === 'refined') {
+        worker.terminate();
+        onRefined(msg.analysis);
       } else {
         onProgress(msg);
       }
@@ -58,7 +73,7 @@ export function analyzeInWorker(
       worker.terminate();
       reject(new Error(e.message));
     };
-    const req: AnalyzeRequest = { mono, sampleRate: buffer.sampleRate, contentHash };
+    const req: AnalyzeRequest = { mono, sampleRate: 22050, contentHash };
     worker.postMessage(req, [mono.buffer]);
   });
 }

@@ -11,6 +11,7 @@
   "dependencies": {
     "idb": "^8.0.0",
     "node-vibrant": "^4.0.3",
+    "onnxruntime-web": "^1.26.0",
     "three": "^0.184.0",
     "tweakpane": "^4.0.5"
   },

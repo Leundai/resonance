@@ -5,7 +5,7 @@
  * conductor, scenes, the loading visual — only ever read this shape.
  */
 
-export const SONG_ANALYSIS_VERSION = 1;
+export const SONG_ANALYSIS_VERSION = 2;
 
 export interface SongAnalysis {
   version: number;
@@ -80,4 +80,8 @@ export type AnalysisProgress =
   | { stage: 'beats'; pct: number }
   | { stage: 'sections'; pct: number }
   | { stage: 'palette'; pct: number }
-  | { stage: 'done'; analysis: SongAnalysis };
+  | { stage: 'model'; pct: number }
+  | { stage: 'infer'; pct: number }
+  | { stage: 'done'; analysis: SongAnalysis }
+  /** Neural pass finished after playback already started. */
+  | { stage: 'refined'; analysis: SongAnalysis };

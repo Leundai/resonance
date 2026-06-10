@@ -143,13 +143,31 @@ async function boot(): Promise<void> {
       if (!analysis) {
         progressWrap.classList.add('visible');
         const stageBase: Record<string, number> = { decoding: 0, curves: 5, beats: 75, sections: 90, palette: 96 };
-        analysis = await analyzeInWorker(audioBuffer, hash, (p) => {
-          const pct = 'pct' in p ? p.pct : 0;
-          const base = stageBase[p.stage] ?? 0;
-          const span = p.stage === 'curves' ? 70 : 8;
-          progressBar.style.width = `${Math.min(99, base + pct * span)}%`;
-          setStatus(`analyzing — ${p.stage}`);
-        });
+        analysis = await analyzeInWorker(
+          audioBuffer,
+          hash,
+          (p) => {
+            const pct = 'pct' in p ? p.pct : 0;
+            if (p.stage === 'model' || p.stage === 'infer') {
+              const label = p.stage === 'model' ? 'downloading beat model' : 'neural beats';
+              setStatus(`${label} — ${Math.round(pct * 100)}%`);
+              return;
+            }
+            const base = stageBase[p.stage] ?? 0;
+            const span = p.stage === 'curves' ? 70 : 8;
+            progressBar.style.width = `${Math.min(99, base + pct * span)}%`;
+            setStatus(`analyzing — ${p.stage}`);
+          },
+          (refined) => {
+            // Neural beats landed mid-playback: hot-swap the grid.
+            refined.palette = palette ? { ...palette, coverArtUrl: null } : null;
+            player?.attachAnalysis(refined);
+            debugState.analysis = refined;
+            void cacheAnalysis(refined);
+            panel.setAnalysis(trackName, refined);
+            setStatus('');
+          },
+        );
         progressBar.style.width = '100%';
         progressWrap.classList.remove('visible');
         // Object URLs don't survive the cache; persist colors only.
