@@ -69,6 +69,8 @@ export class Boids implements VisualScene {
   private uDelta = uniform(0.016);
   private uColorA = uniform(color('#7ad9ff'));
   private uColorB = uniform(color('#ffd166'));
+  private uPredator = uniform(new THREE.Vector3(0, 0, 0));
+  private uPredStrength = uniform(0);
 
   private mesh: THREE.InstancedMesh | null = null;
   private passes: unknown[] = [];
@@ -225,6 +227,14 @@ export class Boids implements VisualScene {
         );
       });
 
+      // Predator flight: beats strike, the flock ripples away — the
+      // murmuration's native reaction instead of a brightness pulse.
+      const pd = pos.sub(vec3(this.uPredator.x, this.uPredator.y, this.uPredator.z));
+      const pr = pd.length().max(0.4);
+      vel.addAssign(
+        pd.div(pr).mul(this.uPredStrength.mul(34).div(pr.mul(pr).add(2))).mul(this.uDelta),
+      );
+
       // Soft spherical containment.
       const dist = pos.length();
       If(dist.greaterThan(BOUNDS), () => {
@@ -277,9 +287,26 @@ export class Boids implements VisualScene {
     if (this.mesh) this.mesh.visible = v;
   }
 
-  update(_f: FrameFeatures, dt: number): void {
+  update(f: FrameFeatures, dt: number): void {
     if (!this.ctx || !this.mesh?.visible) return;
     this.uDelta.value = Math.min(dt, 1 / 30);
+
+    // Each beat drops a predator somewhere in the flock; downbeats
+    // strike harder. Strength decays so the panic wave passes through.
+    if (f.onset || f.downbeat) {
+      const a = Math.random() * Math.PI * 2;
+      const ph = Math.acos(2 * Math.random() - 1);
+      const rr = 3 + Math.random() * 7;
+      (this.uPredator.value as THREE.Vector3).set(
+        rr * Math.sin(ph) * Math.cos(a),
+        rr * Math.sin(ph) * Math.sin(a),
+        rr * Math.cos(ph),
+      );
+      this.uPredStrength.value = f.downbeat ? 1.6 : 0.7;
+    } else {
+      this.uPredStrength.value = (this.uPredStrength.value as number) * Math.exp(-dt * 2.4);
+    }
+
     for (const pass of this.passes) {
       this.ctx.renderer.compute(pass as Parameters<THREE.WebGPURenderer['compute']>[0]);
     }

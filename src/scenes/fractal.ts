@@ -17,7 +17,15 @@ import type { FrameFeatures } from '../audio/features';
 import type { Palette } from '../types/song-analysis';
 import type { ParamSpec, SceneContext, VisualScene } from './scene';
 
-const MAX_ITER = 110;
+const MAX_ITER = 150;
+
+/** Curated Mandelbrot dive targets — rich structure at every depth. */
+const DIVE_POINTS: [number, number][] = [
+  [-0.745428, 0.113009], // seahorse valley spiral
+  [-0.77568377, 0.13646737], // Misiurewicz point
+  [-0.10109636, 0.95628651], // top-bulb spiral
+  [0.28693186, 0.01428683], // elephant valley
+];
 
 /**
  * Animated Julia set, full-screen. The c parameter orbits the classic
@@ -30,6 +38,7 @@ export class Fractal implements VisualScene {
   readonly params: Record<string, ParamSpec> = {
     speed: { default: 0.06, min: 0, max: 0.4 },
     warp: { default: 0.7885, min: 0.68, max: 0.92 },
+    zoomRate: { default: 0.16, min: 0.02, max: 0.6 },
     brightness: { default: 0.8, min: 0, max: 2 },
     pulse: { default: 0, min: 0, max: 1 },
     fade: { default: 1, min: 0, max: 1 },
@@ -39,6 +48,11 @@ export class Fractal implements VisualScene {
 
   private uC = uniform(new THREE.Vector2(0.7885, 0));
   private uZoom = uniform(1.7);
+  private uCenter = uniform(new THREE.Vector2(0, 0));
+  /** Cyclic band phase — beats push color waves along the filaments. */
+  private uPhase = uniform(0);
+  /** 0 = Julia overview (c orbits), 1 = Mandelbrot dive. */
+  private uMode = uniform(0);
   private uBrightness = uniform(this.params.brightness.default);
   private uFade = uniform(1);
   private uFlip = uniform(0); // 0/1 gradient inversion, toggled on drops
@@ -48,11 +62,16 @@ export class Fractal implements VisualScene {
 
   private theta = 2.1; // start angle chosen for a pretty first frame
   private speed = this.params.speed.default;
+  private zoomRate = this.params.zoomRate.default;
+  private zoom = 1.7;
+  private resetPending = false;
+  private diving = false;
+  private diveIndex = 0;
+  private overviewTimer = 0;
   private warp = this.params.warp.default;
   private pulse = 0;
   private inhale = 0;
   private burst = 0;
-  private lastBurst = 0;
 
   private mesh: THREE.Mesh | null = null;
   private ctx: SceneContext | null = null;
@@ -71,6 +90,9 @@ export class Fractal implements VisualScene {
         break;
       case 'warp':
         this.warp = value;
+        break;
+      case 'zoomRate':
+        this.zoomRate = value;
         break;
       case 'brightness':
         this.uBrightness.value = value;
@@ -99,16 +121,17 @@ export class Fractal implements VisualScene {
       const p = screenUV
         .sub(vec2(0.5, 0.5))
         .mul(vec2(aspect, 1))
-        .mul(this.uZoom);
+        .mul(this.uZoom)
+        .add(vec2(this.uCenter.x, this.uCenter.y));
 
-      const z = p.toVar();
+      // Julia: z₀=p, c fixed. Mandelbrot: z₀=0, c=p. One mix flips modes.
+      const z = mix(p, vec2(0, 0), this.uMode).toVar();
+      const cc = mix(vec2(this.uC.x, this.uC.y), p, this.uMode);
       const iter = float(0).toVar();
       const escaped = float(0).toVar();
       Loop({ start: 0, end: MAX_ITER, type: 'int' }, () => {
         z.assign(
-          vec2(z.x.mul(z.x).sub(z.y.mul(z.y)), z.x.mul(z.y).mul(2)).add(
-            vec2(this.uC.x, this.uC.y),
-          ),
+          vec2(z.x.mul(z.x).sub(z.y.mul(z.y)), z.x.mul(z.y).mul(2)).add(cc),
         );
         If(z.dot(z).greaterThan(6), () => {
           escaped.assign(1);
@@ -120,16 +143,19 @@ export class Fractal implements VisualScene {
       // Smooth (continuous) escape-time coloring.
       const m = z.dot(z).max(1.000001);
       const nu = m.log2().mul(0.5).log2();
-      const smoothIter = iter.add(float(1).sub(nu)).clamp(0, MAX_ITER);
-      let t = smoothIter.div(MAX_ITER);
-      t = mix(t, float(1).sub(t), this.uFlip);
-
-      // Deep darks away from the set; the boundary burns bright.
-      // Escape times cluster at t≈0.1–0.45, so the windows sit there.
-      const body = smoothstep(0.02, 0.28, t);
-      const gradient = mix(this.uLow.mul(0.25), this.uHigh, body);
-      const peak = smoothstep(0.24, 0.6, t);
-      const escapedColor = mix(gradient, this.uPeak, peak.mul(0.9));
+      const smoothIter = iter.add(float(1).sub(nu));
+      // Cyclic escape-time banding: depth-invariant by construction —
+      // the classic infinite-zoom look. Beats advance the phase so
+      // color waves flow along the filaments.
+      let cyc = smoothIter.div(7).add(this.uPhase).fract();
+      cyc = mix(cyc, float(1).sub(cyc), this.uFlip);
+      const tri = cyc.mul(2).sub(1).abs();
+      const vis = smoothstep(2, 8, smoothIter);
+      // Thin glowing contour lines over a dim gradient — the classic
+      // deep-zoom look; bloom does the rest.
+      const line = float(1).sub(tri).pow(6);
+      const base = mix(this.uLow.mul(0.3), this.uHigh.mul(0.5), cyc);
+      const escapedColor = base.add(this.uPeak.mul(line).mul(0.85)).mul(vis).mul(0.55);
       // Interior of the set stays near-black for contrast.
       const c = mix(this.uLow.mul(0.1), escapedColor, escaped);
       return c.mul(this.uBrightness).mul(this.uFade);
@@ -146,25 +172,55 @@ export class Fractal implements VisualScene {
     if (this.mesh) this.mesh.visible = v;
   }
 
-  update(_f: FrameFeatures, dt: number): void {
+  update(f: FrameFeatures, dt: number): void {
     if (!this.mesh?.visible) return;
+    const center = this.uCenter.value as THREE.Vector2;
 
-    // c orbits; inhale slows the world, burst kicks it forward.
-    const speedNow = this.speed * (1 - this.inhale * 0.85) + this.burst * 0.25;
-    this.theta += dt * speedNow;
-    const r = this.warp;
-    (this.uC.value as THREE.Vector2).set(r * Math.cos(this.theta), r * Math.sin(this.theta));
+    if (!this.diving) {
+      // Julia overview: the whole set breathing, c orbiting.
+      this.theta += dt * this.speed * (1 - this.inhale * 0.85);
+      (this.uC.value as THREE.Vector2).set(
+        this.warp * Math.cos(this.theta),
+        this.warp * Math.sin(this.theta),
+      );
+      center.lerp(new THREE.Vector2(0, 0), Math.min(dt * 4, 1));
+      this.zoom += (1.7 - this.zoom) * Math.min(dt * 3, 1);
+      this.uMode.value = 0;
 
-    // Zoom: beats breathe in, drops slam; inhale pulls back slightly.
-    const targetZoom =
-      1.7 * (1 - this.pulse * 0.06 - this.burst * 0.35 + this.inhale * 0.12);
-    this.uZoom.value += (targetZoom - (this.uZoom.value as number)) * Math.min(dt * 8, 1);
+      // Dive on the next drop, or after ~14s of overview.
+      this.overviewTimer += dt;
+      if (this.burst > 0.7 || this.overviewTimer > 14) {
+        this.diving = true;
+        this.overviewTimer = 0;
+        this.diveIndex = (this.diveIndex + 1) % DIVE_POINTS.length;
+        this.zoom = 3.0;
+        this.uFlip.value = 1 - (this.uFlip.value as number);
+      }
+    } else {
+      // Mandelbrot dive: curated points are rich at every depth and
+      // stay centered — the true infinite-zoom feel.
+      this.uMode.value = 1;
+      const [tx, ty] = DIVE_POINTS[this.diveIndex];
+      center.lerp(new THREE.Vector2(tx, ty), Math.min(dt * 6, 1));
+      const rate =
+        (this.zoomRate * 1.6 + this.pulse * 0.3 + this.burst * 0.9) *
+        (1 - this.inhale * 0.95);
+      this.zoom *= Math.exp(-dt * rate);
 
-    // Flip the gradient once per drop impact.
-    if (this.burst > 0.7 && this.lastBurst <= 0.7) {
-      this.uFlip.value = 1 - (this.uFlip.value as number);
+      // f32 precision floor: surface on the next beat (musical cut).
+      if (this.zoom < 1.2e-4) this.resetPending = true;
+      if (this.resetPending && (f.onset || this.zoom < 5e-5)) {
+        this.diving = false;
+        this.resetPending = false;
+        this.zoom = 1.7;
+        this.uFlip.value = 1 - (this.uFlip.value as number);
+      }
     }
-    this.lastBurst = this.burst;
+    this.uZoom.value = this.zoom;
+
+    // Phase drift + beat pushes: bands crawl, beats shove them.
+    this.uPhase.value =
+      ((this.uPhase.value as number) + dt * (0.02 + this.pulse * 0.12)) % 1;
   }
 
   /** Fullscreen scene: pin the camera. */

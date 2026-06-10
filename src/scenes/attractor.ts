@@ -102,8 +102,10 @@ export class Attractor implements VisualScene {
       seeds.element(instanceIndex).assign(hash(instanceIndex));
     })().compute(COUNT);
 
+    // Each field as a builder; evaluated only inside its uniform branch
+    // (computing all four then selecting wasted ~4x the math).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const field = (p: any, type: any): any => {
+    const fieldExprs = (p: any): any[] => {
       // Lorenz (σ=10 ρ=28 β=8/3), world ±8 → attractor ±28, z centered 25.
       const lA = p.mul(3.5).add(vec3(0, 0, 25));
       const lorenz = vec3(
@@ -145,9 +147,26 @@ export class Attractor implements VisualScene {
         .div(1.4)
         .mul(0.28);
 
-      return type
-        .equal(0)
-        .select(lorenz, type.equal(1).select(thomas, type.equal(2).select(aizawa, halvorsen)));
+      return [lorenz, thomas, aizawa, halvorsen];
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const field = (p: any, type: any): any => {
+      const out = vec3(0).toVar();
+      const exprs = fieldExprs(p);
+      If(type.equal(0), () => {
+        out.assign(exprs[0]);
+      })
+        .ElseIf(type.equal(1), () => {
+          out.assign(exprs[1]);
+        })
+        .ElseIf(type.equal(2), () => {
+          out.assign(exprs[2]);
+        })
+        .Else(() => {
+          out.assign(exprs[3]);
+        });
+      return out;
     };
 
     const update = Fn(() => {

@@ -23,7 +23,6 @@ export const DEFAULT_CONFIGS: Record<string, ConductorConfig> = {
       // Quiet music = tight lazy murmuration; loud = fast and loose.
       { feature: 'energyPercentile', param: 'cohesion', out: [1.4, 0.5], attack: 0.5, release: 0.5 },
       { feature: 'level', param: 'speed', in: [0, 0.5], out: [0.5, 2.2], attack: 0.1, release: 0.5 },
-      { feature: 'pulse', param: 'scatter', out: [0, 0.9], curve: 'pow2', attack: 0, release: 0 },
       { feature: 'level', param: 'brightness', in: [0, 0.5], out: [0.4, 1.1], attack: 0.05, release: 0.3 },
       { feature: 'treble', param: 'alignment', in: [0, 0.8], out: [1.4, 0.6], attack: 0.2, release: 0.5 },
       { feature: 'inhale', param: 'inhale', out: [0, 1], attack: 0, release: 0.05 },
@@ -90,6 +89,7 @@ export const DEFAULT_CONFIGS: Record<string, ConductorConfig> = {
     pulseDecay: 5,
     mappings: [
       { feature: 'centroid', param: 'speed', out: [0.03, 0.22], attack: 0.4, release: 0.8 },
+      { feature: 'level', param: 'zoomRate', in: [0, 0.5], out: [0.06, 0.42], attack: 0.2, release: 0.8 },
       { feature: 'bass', param: 'warp', out: [0.74, 0.86], curve: 'sqrt', attack: 0.08, release: 0.4 },
       { feature: 'level', param: 'brightness', in: [0, 0.5], out: [0.5, 1.3], attack: 0.05, release: 0.3 },
       { feature: 'pulse', param: 'pulse', out: [0, 1], attack: 0, release: 0 },
