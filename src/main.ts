@@ -8,6 +8,7 @@ import { Boids } from './scenes/boids';
 import { Fractal } from './scenes/fractal';
 import { SceneManager } from './scenes/manager';
 import { ParticleField } from './scenes/particles';
+import { Physarum } from './scenes/physarum';
 import type { SceneContext } from './scenes/scene';
 import { Terrain } from './scenes/terrain';
 import type { SongAnalysis } from './types/song-analysis';
@@ -76,7 +77,13 @@ async function boot(): Promise<void> {
 
   const ctx: SceneContext = { renderer, scene, camera };
   const manager = new SceneManager();
-  await manager.init(ctx, [new ParticleField(), new Boids(), new Terrain(), new Fractal()]);
+  await manager.init(ctx, [
+    new ParticleField(),
+    new Boids(),
+    new Terrain(),
+    new Fractal(),
+    new Physarum(),
+  ]);
   debugState.sceneName = manager.active.name;
   const post = new PostStack(renderer, scene, camera);
 
@@ -161,7 +168,7 @@ async function boot(): Promise<void> {
       hud.classList.toggle('hidden', player.isPlaying);
     }
     const digit = Number(e.key);
-    if (digit >= 1 && digit <= 4) manager.switchTo(digit - 1);
+    if (digit >= 1 && digit <= 5) manager.switchTo(digit - 1);
   });
 
   let last = performance.now();
