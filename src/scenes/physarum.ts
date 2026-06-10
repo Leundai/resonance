@@ -146,9 +146,10 @@ export class Physarum implements VisualScene {
       heading.addAssign(
         turn.mul(goLeft.select(float(1), goRight.select(float(-1), float(0)))),
       );
-      // Burst randomizes headings — the field shatters on a drop.
+      // Constant small jitter prevents total collapse into one blob;
+      // bursts shatter the field on drops.
       const jitter = hash(instanceIndex.add(this.uSeed)).sub(0.5);
-      heading.addAssign(jitter.mul(this.uBurst).mul(2.5));
+      heading.addAssign(jitter.mul(this.uBurst.mul(2.5).add(0.16)));
 
       const speed = this.uMoveSpeed.mul(float(1).sub(this.uInhale.mul(0.85)));
       const dir = vec2(heading.cos(), heading.sin());
@@ -166,7 +167,7 @@ export class Physarum implements VisualScene {
       positions.toAttribute().mul(2).sub(vec2(1, 1)),
       0,
     );
-    depositMat.colorNode = vec4(0.35, 0.35, 0.35, 1);
+    depositMat.colorNode = vec4(0.2, 0.2, 0.2, 1);
     depositMat.scaleNode = float(2 / RES);
     const depositMesh = new THREE.InstancedMesh(
       new THREE.PlaneGeometry(1, 1),
@@ -189,7 +190,9 @@ export class Physarum implements VisualScene {
         }
       }
       const blurred = sum.div(9);
-      const v = mix(center, blurred, 0.35).mul(this.uDecay);
+      // Clamp accumulation: converged lanes otherwise grow unbounded
+      // and the whole field saturates to white.
+      const v = mix(center, blurred, 0.35).mul(this.uDecay).clamp(0, 1.2);
       return vec4(v, v, v, 1);
     })();
     const diffuseQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), diffuseMat);
@@ -201,11 +204,13 @@ export class Physarum implements VisualScene {
     displayMat.colorNode = Fn(() => {
       const aspect = screenSize.x.div(screenSize.y);
       const p = screenUV.sub(vec2(0.5, 0.5)).mul(vec2(aspect, 1)).mul(0.85).add(vec2(0.5, 0.5));
-      const t = this.displayRead.sample(p.fract()).r;
-      const body = smoothstep(0.02, 0.55, t);
+      const raw = this.displayRead.sample(p.fract()).r;
+      // Reinhard tone-map: dense lanes glow, never white-out the field.
+      const t = raw.div(raw.mul(0.8).add(1));
+      const body = smoothstep(0.04, 0.6, t);
       const c = mix(this.uLow.mul(0.2), this.uHigh, body);
-      const hot = smoothstep(0.6, 1.4, t);
-      return mix(c, this.uPeak, hot).mul(this.uBrightness).mul(this.uFade);
+      const hot = smoothstep(0.45, 0.72, t);
+      return mix(c, this.uPeak, hot.mul(0.55)).mul(this.uBrightness).mul(this.uFade);
     })();
     const displayMesh = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), displayMat);
     displayMesh.frustumCulled = false;

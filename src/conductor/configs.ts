@@ -80,7 +80,7 @@ export const DEFAULT_CONFIGS: Record<string, ConductorConfig> = {
       { feature: 'treble', param: 'turnSpeed', in: [0, 0.8], out: [2, 6.5], attack: 0.1, release: 0.5 },
       // Quiet passages keep long memory; loud ones churn.
       { feature: 'level', param: 'decay', in: [0, 0.5], out: [0.99, 0.93], attack: 0.3, release: 0.8 },
-      { feature: 'level', param: 'brightness', in: [0, 0.5], out: [0.6, 1.4], attack: 0.05, release: 0.3 },
+      { feature: 'level', param: 'brightness', in: [0, 0.5], out: [0.6, 1.05], attack: 0.05, release: 0.3 },
       { feature: 'inhale', param: 'inhale', out: [0, 1], attack: 0, release: 0.05 },
       { feature: 'drop', param: 'burst', out: [0, 1], attack: 0, release: 0.02 },
     ],
