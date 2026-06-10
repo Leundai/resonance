@@ -74,7 +74,14 @@ export class Boids implements VisualScene {
   private passes: unknown[] = [];
   private ctx: SceneContext | null = null;
 
+  private paramValues: Record<string, number> = {};
+
+  getParam(name: string): number {
+    return this.paramValues[name] ?? this.params[name]?.default ?? 0;
+  }
+
   setParam(name: string, value: number): void {
+    this.paramValues[name] = value;
     const u = {
       cohesion: this.uCohesion,
       separation: this.uSeparation,

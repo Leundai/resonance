@@ -28,10 +28,22 @@ export class DevPanel {
     this.pane = new Pane({ title: 'resonance' });
     this.pane.hidden = true;
 
-    this.pane.addBinding(this.monitor, 'fps', { readonly: true, format: (v) => v.toFixed(0) });
-    this.pane.addBinding(this.monitor, 'pulse', { readonly: true, min: 0, max: 1 });
-    this.pane.addBinding(this.monitor, 'inhale', { readonly: true, min: 0, max: 1 });
-    this.pane.addBinding(this.monitor, 'drop', { readonly: true, min: 0, max: 1 });
+    this.pane.addBinding(this.monitor, 'fps', {
+      readonly: true,
+      view: 'graph',
+      min: 0,
+      max: 130,
+      interval: 100,
+    });
+    for (const sig of ['pulse', 'inhale', 'drop'] as const) {
+      this.pane.addBinding(this.monitor, sig, {
+        readonly: true,
+        view: 'graph',
+        min: 0,
+        max: 1,
+        interval: 50,
+      });
+    }
 
     const song = this.pane.addFolder({ title: 'song' });
     song.addBinding(this.info, 'track', { readonly: true });
@@ -78,15 +90,29 @@ export class DevPanel {
     });
   }
 
+  private sceneBindings: { obj: Record<string, number>; name: string }[] = [];
+  private boundScene: VisualScene | null = null;
+  private userDragging = false;
+
   private rebindScene(scene: VisualScene): void {
     this.sceneFolder?.dispose();
     this.sceneFolder = this.pane.addFolder({ title: `scene: ${scene.name}` });
+    this.sceneBindings = [];
+    this.boundScene = scene;
     for (const [name, spec] of Object.entries(scene.params)) {
-      const obj = { [name]: spec.default };
+      const obj = { [name]: scene.getParam(name) };
+      this.sceneBindings.push({ obj, name });
       this.sceneFolder
         .addBinding(obj, name, { min: spec.min, max: spec.max })
-        .on('change', (e) => scene.setParam(name, e.value as number));
+        .on('change', (e) => {
+          // Only forward genuine user edits, not read-back refreshes.
+          if (this.userDragging || !this.settings.conductor) {
+            scene.setParam(name, e.value as number);
+          }
+        });
     }
+    this.sceneFolder.element.addEventListener('pointerdown', () => (this.userDragging = true));
+    window.addEventListener('pointerup', () => (this.userDragging = false));
   }
 
   setAnalysis(track: string, analysis: SongAnalysis): void {
@@ -105,11 +131,25 @@ export class DevPanel {
     this.pane.refresh();
   }
 
-  update(fps: number, signals: { pulse: number; inhale: number; drop: number }): void {
-    if (this.pane.hidden) return;
+  private readbackAccum = 0;
+
+  update(fps: number, signals: { pulse: number; inhale: number; drop: number }, dt = 0.016): void {
     this.monitor.fps = fps;
     this.monitor.pulse = signals.pulse;
     this.monitor.inhale = signals.inhale;
     this.monitor.drop = signals.drop;
+
+    if (this.pane.hidden) return;
+    // Read conductor-driven values back into the sliders (~12 Hz) so the
+    // panel dances with the music instead of sitting frozen.
+    this.readbackAccum += dt;
+    if (this.readbackAccum > 0.08 && this.settings.conductor && !this.userDragging) {
+      this.readbackAccum = 0;
+      const scene = this.boundScene;
+      if (scene) {
+        for (const b of this.sceneBindings) b.obj[b.name] = scene.getParam(b.name);
+        this.sceneFolder?.refresh();
+      }
+    }
   }
 }

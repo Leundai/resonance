@@ -24,6 +24,8 @@ export interface VisualScene {
   readonly name: string;
   readonly params: Record<string, ParamSpec>;
   setParam(name: string, value: number): void;
+  /** Current value (for UI read-back of conductor-driven params). */
+  getParam(name: string): number;
   init(ctx: SceneContext): Promise<void> | void;
   update(features: FrameFeatures, dt: number): void;
   setVisible(visible: boolean): void;

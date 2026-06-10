@@ -55,7 +55,14 @@ export class ParticleField implements VisualScene {
   private updateCompute: unknown = null;
   private ctx: SceneContext | null = null;
 
+  private paramValues: Record<string, number> = {};
+
+  getParam(name: string): number {
+    return this.paramValues[name] ?? this.params[name]?.default ?? 0;
+  }
+
   setParam(name: string, value: number): void {
+    this.paramValues[name] = value;
     switch (name) {
       case 'turbulence':
         this.uTurbulence.value = value;

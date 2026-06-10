@@ -320,7 +320,7 @@ async function boot(): Promise<void> {
     }
 
     fpsSmooth += (1 / Math.max(dt, 1e-4) - fpsSmooth) * 0.05;
-    panel.update(fpsSmooth, manager.signals);
+    panel.update(fpsSmooth, manager.signals, dt);
     const bpmSuffix =
       !live?.isPlaying && debugState.analysis ? ` · ${debugState.analysis.tempo.bpm} bpm` : '';
     const nowPlaying = trackName ? `${trackName} · ${manager.active.name}${bpmSuffix}` : '';

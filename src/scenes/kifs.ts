@@ -78,7 +78,14 @@ export class Kifs implements VisualScene {
     });
   }
 
+  private paramValues: Record<string, number> = {};
+
+  getParam(name: string): number {
+    return this.paramValues[name] ?? this.params[name]?.default ?? 0;
+  }
+
   setParam(name: string, value: number): void {
+    this.paramValues[name] = value;
     switch (name) {
       case 'foldDrift':
         this.foldDrift = value;

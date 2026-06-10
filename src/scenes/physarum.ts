@@ -86,7 +86,14 @@ export class Physarum implements VisualScene {
     this.rtB = new THREE.RenderTarget(RES, RES, opts);
   }
 
+  private paramValues: Record<string, number> = {};
+
+  getParam(name: string): number {
+    return this.paramValues[name] ?? this.params[name]?.default ?? 0;
+  }
+
   setParam(name: string, value: number): void {
+    this.paramValues[name] = value;
     const u = {
       sensorAngle: this.uSensorAngle,
       turnSpeed: this.uTurnSpeed,
