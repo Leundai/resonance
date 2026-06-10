@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>resonance</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6' fill='%238a7cff'/></svg>"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #050510;
+        color: #e8e8f0;
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        overflow: hidden;
+      }
+      #app {
+        position: fixed;
+        inset: 0;
+      }
+      #app canvas {
+        display: block;
+      }
+      #hud {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 12px;
+        pointer-events: none;
+        transition: opacity 0.6s ease;
+      }
+      #hud.hidden {
+        opacity: 0;
+      }
+      #drop-hint {
+        font-size: 14px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        opacity: 0.7;
+      }
+      #status {
+        font-size: 12px;
+        opacity: 0.5;
+        min-height: 1em;
+      }
+      body.dragging::after {
+        content: '';
+        position: fixed;
+        inset: 8px;
+        border: 1px dashed rgba(232, 232, 240, 0.5);
+        border-radius: 8px;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="hud">
+      <div id="drop-hint">drop a song · or press O to open</div>
+      <div id="status"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
