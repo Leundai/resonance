@@ -1,5 +1,6 @@
 import type * as THREE from 'three/webgpu';
 import type { FrameFeatures } from '../audio/features';
+import type { Palette } from '../types/song-analysis';
 import { Conductor } from '../conductor/conductor';
 import { DEFAULT_CONFIGS } from '../conductor/configs';
 import type { SceneContext, VisualScene } from './scene';
@@ -37,6 +38,10 @@ export class SceneManager {
 
   get sceneNames(): string[] {
     return this.scenes.map((s) => s.name);
+  }
+
+  applyPalette(palette: Palette): void {
+    for (const s of this.scenes) s.applyPalette?.(palette);
   }
 
   switchTo(index: number): void {

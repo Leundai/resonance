@@ -11,6 +11,7 @@ import {
   vec3,
 } from 'three/tsl';
 import type { FrameFeatures } from '../audio/features';
+import type { Palette } from '../types/song-analysis';
 import type { ParamSpec, SceneContext, VisualScene } from './scene';
 
 const SIZE = 90;
@@ -120,6 +121,10 @@ export class Terrain implements VisualScene {
     (this.uLow.value as THREE.Color).set(low);
     (this.uHigh.value as THREE.Color).set(high);
     if (peak) (this.uPeak.value as THREE.Color).set(peak);
+  }
+
+  applyPalette(p: Palette): void {
+    this.setPalette(p.background, p.primary, p.accent);
   }
 
   dispose(): void {

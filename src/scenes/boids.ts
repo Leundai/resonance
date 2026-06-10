@@ -15,6 +15,7 @@ import {
   vec3,
 } from 'three/tsl';
 import type { FrameFeatures } from '../audio/features';
+import type { Palette } from '../types/song-analysis';
 import type { ParamSpec, SceneContext, VisualScene } from './scene';
 
 // Brute-force O(n²) neighbor pass on GPU — fine at 4k agents; the
@@ -173,6 +174,10 @@ export class Boids implements VisualScene {
   setPalette(a: string, b: string): void {
     (this.uColorA.value as THREE.Color).set(a);
     (this.uColorB.value as THREE.Color).set(b);
+  }
+
+  applyPalette(p: Palette): void {
+    this.setPalette(p.secondary, p.accent);
   }
 
   dispose(): void {

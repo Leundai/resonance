@@ -1,5 +1,6 @@
 import type * as THREE from 'three/webgpu';
 import type { FrameFeatures } from '../audio/features';
+import type { Palette } from '../types/song-analysis';
 
 export interface SceneContext {
   renderer: THREE.WebGPURenderer;
@@ -28,5 +29,7 @@ export interface VisualScene {
   setVisible(visible: boolean): void;
   /** Scenes that want their own framing override the default orbit. */
   updateCamera?(camera: THREE.PerspectiveCamera, t: number, features: FrameFeatures): void;
+  /** Adopt song colors extracted from cover art. */
+  applyPalette?(palette: Palette): void;
   dispose(): void;
 }

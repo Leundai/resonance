@@ -15,6 +15,7 @@ import {
   vec3,
 } from 'three/tsl';
 import type { FrameFeatures } from '../audio/features';
+import type { Palette } from '../types/song-analysis';
 import type { ParamSpec, SceneContext, VisualScene } from './scene';
 
 const COUNT = 100_000;
@@ -145,7 +146,7 @@ export class ParticleField implements VisualScene {
 
     const d = uv().distance(0.5);
     material.opacityNode = smoothstep(0.5, 0.05, d)
-      .mul(float(0.25).add(this.uBrightness.mul(0.35)))
+      .mul(float(0.1).add(this.uBrightness.mul(0.16)))
       .mul(this.uFade);
     material.scaleNode = float(0.08)
       .add(seedAttr.mul(0.06))
@@ -173,6 +174,10 @@ export class ParticleField implements VisualScene {
   setPalette(a: string, b: string): void {
     (this.uColorA.value as THREE.Color).set(a);
     (this.uColorB.value as THREE.Color).set(b);
+  }
+
+  applyPalette(p: Palette): void {
+    this.setPalette(p.primary, p.accent);
   }
 
   dispose(): void {

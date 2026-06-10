@@ -1,5 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { analyzeInWorker, cacheAnalysis, getCachedAnalysis, sha256Hex } from './analysis';
+import { extractPalette } from './analysis/palette';
+import { PostStack } from './post/pipeline';
 import { FilePlayer } from './audio/file-player';
 import type { FrameFeatures } from './audio/features';
 import { Boids } from './scenes/boids';
@@ -72,6 +74,7 @@ async function boot(): Promise<void> {
   const manager = new SceneManager();
   await manager.init(ctx, [new ParticleField(), new Boids(), new Terrain()]);
   debugState.sceneName = manager.active.name;
+  const post = new PostStack(renderer, scene, camera);
 
   let player: FilePlayer | null = null;
 
@@ -86,21 +89,30 @@ async function boot(): Promise<void> {
     try {
       const bytes = await file.arrayBuffer();
       const hash = await sha256Hex(bytes);
-      player ??= new FilePlayer();
-      const audioBuffer = await player.load(bytes); // detaches `bytes`
-
+      // Cover art must be read before decode detaches the buffer.
       const t0 = performance.now();
       let analysis = await getCachedAnalysis(hash);
       debugState.analysisCached = analysis !== null;
+      const palette = analysis?.palette ?? (await extractPalette(bytes));
+
+      player ??= new FilePlayer();
+      const audioBuffer = await player.load(bytes); // detaches `bytes`
+
       if (!analysis) {
         analysis = await analyzeInWorker(audioBuffer, hash, (p) => {
           setStatus(`analyzing — ${p.stage} ${Math.round(('pct' in p ? p.pct : 0) * 100)}%`);
         });
+        // Object URLs don't survive the cache; persist colors only.
+        analysis.palette = palette ? { ...palette, coverArtUrl: null } : null;
         await cacheAnalysis(analysis);
       }
       debugState.analysisMs = performance.now() - t0;
       debugState.analysis = analysis;
       player.attachAnalysis(analysis);
+      if (palette) {
+        manager.applyPalette(palette);
+        scene.background = new THREE.Color(palette.background);
+      }
 
       await player.play();
       hud.classList.add('hidden');
@@ -172,7 +184,8 @@ async function boot(): Promise<void> {
       camera.lookAt(0, 0, 0);
     }
 
-    renderer.render(scene, camera);
+    post.update(features, dt);
+    post.render();
   });
 }
 
