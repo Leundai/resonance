@@ -15,6 +15,9 @@ export class DevPanel {
   private info = { track: '—', bpm: 0, sections: 0, key: '—', feel: '—' };
   private settings = { conductor: true, scene: 0, autoScenes: true };
   private sceneFolder: FolderApi | null = null;
+  /** Tweakpane's refresh() emits change events — guard programmatic syncs
+   *  so they don't masquerade as user actions (e.g. tripping scene lock). */
+  private syncing = false;
 
   /** LLM director settings — key persists in localStorage. */
   readonly director = {
@@ -57,19 +60,28 @@ export class DevPanel {
       .addBinding(this.settings, 'scene', {
         options: Object.fromEntries(manager.sceneNames.map((n, i) => [n, i])),
       })
-      .on('change', (e) => manager.switchTo(e.value, { manual: true }));
+      .on('change', (e) => {
+        if (this.syncing) return;
+        manager.switchTo(e.value, { manual: true });
+      });
     this.pane
       .addBinding(this.settings, 'conductor', { label: 'conductor drives' })
       .on('change', (e) => {
+        if (this.syncing) return;
         manager.setConductorEnabled(e.value);
         this.setSlidersDisabled(e.value);
       });
     this.pane
       .addBinding(this.settings, 'autoScenes', { label: 'auto scene changes' })
-      .on('change', (e) => manager.setAutoRotate(e.value));
+      .on('change', (e) => {
+        if (this.syncing) return;
+        manager.setAutoRotate(e.value);
+      });
     manager.onAutoRotateChanged = (on) => {
+      this.syncing = true;
       this.settings.autoScenes = on;
       this.pane.refresh();
+      this.syncing = false;
     };
 
     const director = this.pane.addFolder({ title: 'director (LLM)', expanded: false });
@@ -96,9 +108,11 @@ export class DevPanel {
 
     this.rebindScene(manager.active);
     manager.onSceneChanged = (scene) => {
+      this.syncing = true;
       this.settings.scene = manager.activeIndexValue;
       this.rebindScene(scene);
       this.pane.refresh();
+      this.syncing = false;
     };
 
     window.addEventListener('keydown', (e) => {
@@ -125,7 +139,7 @@ export class DevPanel {
       const api = this.sceneFolder
         .addBinding(obj, name, { min: spec.min, max: spec.max })
         .on('change', (e) => {
-          // Read-back refreshes don't fire change events; this is a user edit.
+          if (this.syncing) return;
           if (!this.settings.conductor) scene.setParam(name, e.value as number);
         });
       this.sceneBindings.push({ obj, name, api: api as unknown as { disabled: boolean } });
@@ -182,8 +196,10 @@ export class DevPanel {
       this.readbackAccum = 0;
       const scene = this.boundScene;
       if (scene) {
+        this.syncing = true;
         for (const b of this.sceneBindings) b.obj[b.name] = scene.getParam(b.name);
         this.sceneFolder?.refresh();
+        this.syncing = false;
       }
     }
   }
