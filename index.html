@@ -68,6 +68,22 @@
         background: rgba(178, 158, 255, 0.9);
         transition: width 0.15s ease;
       }
+      #toast {
+        position: fixed;
+        left: 50%;
+        top: 38%;
+        transform: translateX(-50%);
+        font-size: 20px;
+        letter-spacing: 0.18em;
+        text-align: center;
+        opacity: 0;
+        transition: opacity 0.4s ease;
+        pointer-events: none;
+        text-shadow: 0 0 24px rgba(0, 0, 0, 0.8);
+      }
+      #toast.visible {
+        opacity: 0.9;
+      }
       #now-playing {
         position: fixed;
         left: 16px;
@@ -94,6 +110,7 @@
       <div id="progress-wrap"><div id="progress-bar"></div></div>
       <div id="status"></div>
     </div>
+    <div id="toast"></div>
     <div id="now-playing"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

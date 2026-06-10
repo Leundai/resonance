@@ -22,6 +22,17 @@ const app = document.getElementById('app')!;
 const hud = document.getElementById('hud')!;
 const statusEl = document.getElementById('status')!;
 const nowPlayingEl = document.getElementById('now-playing')!;
+const toastEl = document.getElementById('toast')!;
+const dropHint = document.getElementById('drop-hint')!;
+const PAUSED_HINT = 'paused · space to resume · drop another song anytime';
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+function toast(msg: string, holdMs = 2600): void {
+  toastEl.textContent = msg;
+  toastEl.classList.add('visible');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('visible'), holdMs);
+}
 const progressWrap = document.getElementById('progress-wrap')!;
 const progressBar = document.getElementById('progress-bar')!;
 
@@ -124,13 +135,13 @@ async function boot(): Promise<void> {
 
   let player: FilePlayer | null = null;
   let live: LiveProvider | null = null;
+  let uiLoading = false;
 
   async function toggleLive(source: LiveSource): Promise<void> {
     if (live?.isPlaying) {
       live.stop();
       trackName = '';
       setStatus('');
-      hud.classList.remove('hidden');
       return;
     }
     try {
@@ -139,7 +150,6 @@ async function boot(): Promise<void> {
       await live.start(source);
       trackName = source === 'display' ? 'live · system audio' : 'live · input device';
       document.title = `resonance — ${trackName}`;
-      hud.classList.add('hidden');
       setStatus('');
     } catch (err) {
       setStatus(`capture failed: ${err instanceof Error ? err.message : err}`);
@@ -153,7 +163,12 @@ async function boot(): Promise<void> {
   });
 
   async function loadFile(file: File): Promise<void> {
+    // Immediate feedback even while a previous track has the HUD hidden.
+    const name = file.name.replace(/\.[^.]+$/, '');
+    toast(`♪ ${name}`, 4000);
+    uiLoading = true;
     setStatus(`decoding ${file.name}…`);
+    player?.pause();
     try {
       const bytes = await file.arrayBuffer();
       const hash = await sha256Hex(bytes);
@@ -164,6 +179,7 @@ async function boot(): Promise<void> {
       const palette = analysis?.palette ?? (await extractPalette(bytes));
 
       player ??= new FilePlayer();
+      (debugState as Record<string, unknown>).player = player;
       const audioBuffer = await player.load(bytes); // detaches `bytes`
 
       if (!analysis) {
@@ -213,9 +229,8 @@ async function boot(): Promise<void> {
 
       await player.play();
       debugState.seek = (sec: number) => player?.seek(sec);
-      hud.classList.add('hidden');
       setStatus('');
-      trackName = file.name.replace(/\.[^.]+$/, '');
+      trackName = name;
       document.title = `resonance — ${trackName}`;
       panel.setAnalysis(trackName, analysis);
       manager.clearDirectorPlan();
@@ -223,6 +238,8 @@ async function boot(): Promise<void> {
     } catch (err) {
       setStatus(`failed to load: ${err instanceof Error ? err.message : err}`);
       console.error(err);
+    } finally {
+      uiLoading = false;
     }
   }
 
@@ -257,7 +274,6 @@ async function boot(): Promise<void> {
     if (e.code === 'Space' && player) {
       e.preventDefault();
       void player.toggle();
-      hud.classList.toggle('hidden', player.isPlaying);
     }
     const digit = Number(e.key);
     if (digit >= 1 && digit <= 7) manager.switchTo(digit - 1);
@@ -295,6 +311,13 @@ async function boot(): Promise<void> {
 
     post.update(features, dt, manager.signals);
     debugState.signals = manager.signals;
+
+    // HUD visibility is pure state: visible while loading or idle/paused.
+    const active = (live?.isPlaying ?? false) || (player?.isPlaying ?? false);
+    hud.classList.toggle('hidden', active && !uiLoading);
+    if (!active && trackName && dropHint.textContent !== PAUSED_HINT) {
+      dropHint.textContent = PAUSED_HINT;
+    }
 
     fpsSmooth += (1 / Math.max(dt, 1e-4) - fpsSmooth) * 0.05;
     panel.update(fpsSmooth, manager.signals);
