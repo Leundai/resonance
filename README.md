@@ -19,12 +19,12 @@ Three.js WebGPU with TSL compute.
 | **L** | live system audio (Chromium screen-share — tick "Share tab audio") |
 | **M** | live input device (mic, or a [BlackHole](https://github.com/ExistentialAudio/BlackHole) loopback for cross-browser system audio) |
 | **Space** | play / pause |
-| **1–7** | switch scene manually |
+| **1–8** | switch scene manually |
 | **`** (backtick) | dev panel — live param tuning, scene/conductor control, LLM director settings |
 
 Scenes auto-rotate on section boundaries (by energy band, or by the director's plan).
 
-## Scenes (keys 1–7)
+## Scenes (keys 1–8)
 
 1. **particles** — 100k curl-noise flow-field particles in a breathing shell
 2. **boids** — 32k-agent GPU murmuration (counting-sort spatial grid); calm music pulls it tight, drops scatter it
@@ -33,6 +33,7 @@ Scenes auto-rotate on section boundaries (by energy band, or by the director's p
 5. **physarum** — 120k-agent slime mold forming living neon vein networks
 6. **attractor** — 150k particles in strange-attractor phase spaces (Lorenz / Thomas / Aizawa / Halvorsen); every section morphs to the next attractor
 7. **kifs** — raymarched kaleidoscopic IFS fractal; the fold angle rides the spectral centroid, drops kick the rotation
+8. **blackhole** — gravitationally lensed accretion disk; bass feeds the disk, beats orbit a hot flare, drops surge gravity itself
 
 All scenes are palette-aware and wired to three choreography signals: `pulse` (every beat),
 `inhale` (ramps through the last ~1.2 s before a louder section), and `drop` (fires on impact).
@@ -82,6 +83,5 @@ params live, bake good values back into `src/conductor/configs.ts`.
 
 ## Roadmap
 
-- Downbeat-aware accents (hit harder on the "1" — the data's already there)
-- One-click demo preset on the live site
 - MusiCNN neural emotion, cached Demucs stems → per-stem scenes (boids on the vocal line)
+- OKLab palette interpolation, perturbation-theory deep zoom (beyond f32)
