@@ -51,6 +51,17 @@ export const DEFAULT_CONFIGS: Record<string, ConductorConfig> = {
       { feature: 'drop', param: 'burst', out: [0, 1], attack: 0, release: 0.02 },
     ],
   },
+  blackhole: {
+    pulseDecay: 5,
+    mappings: [
+      { feature: 'bass', param: 'diskBrightness', out: [0.5, 1.9], curve: 'sqrt', attack: 0.05, release: 0.3 },
+      { feature: 'treble', param: 'turbulence', in: [0, 0.8], out: [0.2, 1], attack: 0.1, release: 0.5 },
+      { feature: 'level', param: 'spin', in: [0, 0.5], out: [0.5, 2.2], attack: 0.15, release: 0.7 },
+      { feature: 'pulse', param: 'flare', out: [0, 1], attack: 0, release: 0 },
+      { feature: 'inhale', param: 'inhale', out: [0, 1], attack: 0, release: 0.05 },
+      { feature: 'drop', param: 'burst', out: [0, 1], attack: 0, release: 0.02 },
+    ],
+  },
   kifs: {
     pulseDecay: 5,
     mappings: [

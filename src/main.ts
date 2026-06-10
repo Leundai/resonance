@@ -7,6 +7,7 @@ import { PostStack } from './post/pipeline';
 import { FilePlayer } from './audio/file-player';
 import type { FrameFeatures } from './audio/features';
 import { LiveProvider, type LiveSource } from './audio/live-provider';
+import { BlackHole } from './scenes/blackhole';
 import { Boids } from './scenes/boids';
 import { Fractal } from './scenes/fractal';
 import { Kifs } from './scenes/kifs';
@@ -108,6 +109,7 @@ async function boot(): Promise<void> {
     new Physarum(),
     new Attractor(),
     new Kifs(),
+    new BlackHole(),
   ]);
   debugState.sceneName = manager.active.name;
   const post = new PostStack(renderer, scene, camera);
@@ -310,7 +312,7 @@ async function boot(): Promise<void> {
       void player.toggle();
     }
     const digit = Number(e.key);
-    if (digit >= 1 && digit <= 7) manager.switchTo(digit - 1, { manual: true });
+    if (digit >= 1 && digit <= 8) manager.switchTo(digit - 1, { manual: true });
   });
 
   let last = performance.now();
