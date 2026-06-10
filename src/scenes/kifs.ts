@@ -55,6 +55,7 @@ export class Kifs implements VisualScene {
   private uPeak = uniform(color('#fff1e0'));
 
   private foldDrift = this.params.foldDrift.default;
+  private foldPhase = 0;
   private twist = 0;
   private inhale = 0;
   private burst = 0;
@@ -216,10 +217,11 @@ export class Kifs implements VisualScene {
     if (!ctx || !this.displayMesh?.visible || !this.marchQuad) return;
     this.time += dt;
 
-    // Fold angle: slow drift + twist bias + drop kick. Inhale freezes.
+    // Fold angle oscillates inside the known-good band — unbounded drift
+    // wanders into degenerate regimes (all-escaping = invisible, or solid).
     const drift = this.foldDrift * (1 - this.inhale * 0.9);
-    this.uAngle.value =
-      (this.uAngle.value as number) + dt * (drift + this.burst * 0.5) + 0;
+    this.foldPhase += dt * (drift * 6 + this.burst * 1.2);
+    this.uAngle.value = 0.5 + 0.4 * Math.sin(this.foldPhase);
     const targetScale =
       (this.params.scale.default + this.twist * 0.3) * (1 + this.burst * 0.06);
     this.uScale.value += (targetScale - (this.uScale.value as number)) * Math.min(dt * 6, 1);
