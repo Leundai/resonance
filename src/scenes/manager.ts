@@ -1,4 +1,4 @@
-import type * as THREE from 'three/webgpu';
+import * as THREE from 'three/webgpu';
 import type { FrameFeatures } from '../audio/features';
 import type { Palette } from '../types/song-analysis';
 import { Conductor } from '../conductor/conductor';
@@ -95,6 +95,88 @@ export class SceneManager {
     for (const s of this.scenes) s.applyPalette?.(palette);
   }
 
+  // ---- Living palette: per-section hue/sat variance, smoothly lerped ----
+  private basePalette: Palette | null = null;
+  private colNames = ['background', 'primary', 'secondary', 'accent'] as const;
+  private currentCols = {
+    background: new THREE.Color(),
+    primary: new THREE.Color(),
+    secondary: new THREE.Color(),
+    accent: new THREE.Color(),
+  };
+  private targetCols = {
+    background: new THREE.Color(),
+    primary: new THREE.Color(),
+    secondary: new THREE.Color(),
+    accent: new THREE.Color(),
+  };
+  private paletteDirty = false;
+  private paletteAccum = 0;
+
+  /** The lerped background color — main copies this onto scene.background. */
+  get paletteBackground(): THREE.Color | null {
+    return this.basePalette ? this.currentCols.background : null;
+  }
+
+  setBasePalette(p: Palette): void {
+    this.basePalette = p;
+    for (const k of this.colNames) {
+      this.currentCols[k].set(p[k]);
+      this.targetCols[k].set(p[k]);
+    }
+    this.applyPalette(p);
+  }
+
+  /** Rotate the base palette for a section: energy warms/brightens it,
+   *  a per-section wobble keeps repeats from looking identical. */
+  private retargetPalette(startSec: number, energy: number): void {
+    const p = this.basePalette;
+    if (!p) return;
+    const wobble = (Math.sin(startSec * 12.9898) * 43758.5453) % 1; // deterministic hash
+    const dh = (energy - 0.5) * 0.12 + wobble * 0.1 - 0.05;
+    const hsl = { h: 0, s: 0, l: 0 };
+    for (const k of this.colNames) {
+      const col = this.targetCols[k].set(p[k]);
+      col.getHSL(hsl);
+      const shift = k === 'background' ? dh * 0.5 : dh;
+      col.setHSL(
+        (hsl.h + shift + 1) % 1,
+        Math.min(1, hsl.s * (0.88 + energy * 0.3)),
+        Math.min(k === 'background' ? 0.12 : 0.85, hsl.l * (0.92 + energy * 0.22)),
+      );
+    }
+    this.paletteDirty = true;
+  }
+
+  private updatePalette(dt: number): void {
+    if (!this.basePalette || !this.paletteDirty) return;
+    const k = 1 - Math.exp(-dt / 0.8);
+    let maxDelta = 0;
+    for (const name of this.colNames) {
+      const c = this.currentCols[name];
+      const t = this.targetCols[name];
+      c.lerp(t, k);
+      maxDelta = Math.max(
+        maxDelta,
+        Math.abs(c.r - t.r) + Math.abs(c.g - t.g) + Math.abs(c.b - t.b),
+      );
+    }
+    // Push to scenes at ~10 Hz while transitioning.
+    this.paletteAccum += dt;
+    if (this.paletteAccum > 0.1) {
+      this.paletteAccum = 0;
+      const hex = (c: THREE.Color): string => `#${c.getHexString()}`;
+      this.applyPalette({
+        ...this.basePalette,
+        background: hex(this.currentCols.background),
+        primary: hex(this.currentCols.primary),
+        secondary: hex(this.currentCols.secondary),
+        accent: hex(this.currentCols.accent),
+      });
+      if (maxDelta < 0.01) this.paletteDirty = false;
+    }
+  }
+
   switchTo(index: number, opts?: { manual?: boolean }): void {
     if (opts?.manual && this.autoRotate) {
       this.autoRotate = false;
@@ -114,6 +196,8 @@ export class SceneManager {
    * boids for high-energy sections.
    */
   private onSection(startSec: number, energy: number): void {
+    // Palette breathes with every section regardless of scene lock.
+    this.retargetPalette(startSec, energy);
     // Manual scene choice wins until the user hands control back.
     if (!this.autoRotate) return;
     // Director plan takes precedence over the energy-band heuristic.
@@ -160,6 +244,7 @@ export class SceneManager {
     }
 
     this.conductor?.update(features, dt);
+    this.updatePalette(dt);
     this.active.setParam('fade', this.fade);
     this.active.update(features, dt);
   }

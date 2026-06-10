@@ -229,7 +229,7 @@ async function boot(): Promise<void> {
       const effectivePalette =
         palette ?? (analysis.emotion ? emotionPalette(analysis.emotion) : null);
       if (effectivePalette) {
-        manager.applyPalette(effectivePalette);
+        manager.setBasePalette(effectivePalette);
         scene.background = new THREE.Color(effectivePalette.background);
       }
 
@@ -348,6 +348,8 @@ async function boot(): Promise<void> {
       camera.lookAt(0, 0, 0);
     }
 
+    const bg = manager.paletteBackground;
+    if (bg) (scene.background as THREE.Color).copy(bg);
     post.update(features, dt, manager.signals);
     debugState.signals = manager.signals;
 

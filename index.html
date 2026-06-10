@@ -100,6 +100,12 @@
       #demo-btn:hover {
         background: rgba(178, 158, 255, 0.28);
       }
+      /* Tweakpane container: never taller than the viewport — scroll inside. */
+      .tp-dfwv {
+        max-height: calc(100vh - 16px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
       /* Tweakpane multiline monitors (director rationale): wrap, don't side-scroll. */
       .tp-mllv_i {
         white-space: pre-wrap !important;
