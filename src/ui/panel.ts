@@ -16,6 +16,14 @@ export class DevPanel {
   private settings = { conductor: true, scene: 0 };
   private sceneFolder: FolderApi | null = null;
 
+  /** LLM director settings — key persists in localStorage. */
+  readonly director = {
+    apiKey: localStorage.getItem('resonance.anthropicKey') ?? '',
+    enabled: localStorage.getItem('resonance.directorEnabled') === 'true',
+    model: localStorage.getItem('resonance.directorModel') ?? 'claude-haiku-4-5-20251001',
+    status: 'idle',
+  };
+
   constructor(manager: SceneManager) {
     this.pane = new Pane({ title: 'resonance' });
     this.pane.hidden = true;
@@ -38,6 +46,23 @@ export class DevPanel {
     this.pane
       .addBinding(this.settings, 'conductor', { label: 'conductor drives' })
       .on('change', (e) => manager.setConductorEnabled(e.value));
+
+    const director = this.pane.addFolder({ title: 'director (LLM)', expanded: false });
+    director
+      .addBinding(this.director, 'apiKey', { label: 'anthropic key' })
+      .on('change', (e) => localStorage.setItem('resonance.anthropicKey', e.value));
+    director
+      .addBinding(this.director, 'enabled')
+      .on('change', (e) => localStorage.setItem('resonance.directorEnabled', String(e.value)));
+    director
+      .addBinding(this.director, 'model', {
+        options: {
+          'haiku 4.5': 'claude-haiku-4-5-20251001',
+          'sonnet 4.6': 'claude-sonnet-4-6',
+        },
+      })
+      .on('change', (e) => localStorage.setItem('resonance.directorModel', e.value));
+    director.addBinding(this.director, 'status', { readonly: true });
 
     this.rebindScene(manager.active);
     manager.onSceneChanged = (scene) => {
@@ -66,6 +91,11 @@ export class DevPanel {
     this.info.track = track;
     this.info.bpm = analysis.tempo.bpm;
     this.info.sections = analysis.sections.length;
+  }
+
+  setDirectorStatus(status: string): void {
+    this.director.status = status;
+    this.pane.refresh();
   }
 
   update(fps: number, signals: { pulse: number; inhale: number; drop: number }): void {

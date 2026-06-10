@@ -3,6 +3,7 @@ import type { FrameFeatures } from '../audio/features';
 import type { Palette } from '../types/song-analysis';
 import { Conductor } from '../conductor/conductor';
 import { DEFAULT_CONFIGS } from '../conductor/configs';
+import type { DirectorPlan, SceneSpec } from '../conductor/director';
 import type { SceneContext, VisualScene } from './scene';
 
 const FADE_SEC = 0.7;
@@ -19,6 +20,7 @@ export class SceneManager {
   private conductor: Conductor | null = null;
   /** Energy of the section we last switched on. */
   private lastSwitchEnergy = -1;
+  private directorPlan: DirectorPlan | null = null;
 
   async init(ctx: SceneContext, scenes: VisualScene[]): Promise<void> {
     this.scenes = scenes;
@@ -27,9 +29,32 @@ export class SceneManager {
 
     this.conductor = new Conductor(
       scenes[this.activeIndex],
-      DEFAULT_CONFIGS[scenes[this.activeIndex].name] ?? { mappings: [] },
+      this.configFor(scenes[this.activeIndex].name),
     );
-    this.conductor.onSectionChange = (_start, energy) => this.onSection(energy);
+    this.conductor.onSectionChange = (start, energy) => this.onSection(start, energy);
+  }
+
+  private configFor(name: string) {
+    return this.directorPlan?.configs[name] ?? DEFAULT_CONFIGS[name] ?? { mappings: [] };
+  }
+
+  get sceneSpecs(): SceneSpec[] {
+    return this.scenes.map((s) => ({ name: s.name, params: s.params }));
+  }
+
+  applyDirectorPlan(plan: DirectorPlan): void {
+    this.directorPlan = plan;
+    this.conductor?.setConfig(this.configFor(this.active.name));
+    // Jump to the plan's opening scene if it differs.
+    const opening = plan.scenePlan[0];
+    if (opening && opening.scene !== this.active.name) {
+      this.switchTo(this.scenes.findIndex((s) => s.name === opening.scene));
+    }
+  }
+
+  clearDirectorPlan(): void {
+    this.directorPlan = null;
+    this.conductor?.setConfig(this.configFor(this.active.name));
   }
 
   get active(): VisualScene {
@@ -69,7 +94,16 @@ export class SceneManager {
    * temperament matches — terrain for quiet, particles for mid,
    * boids for high-energy sections.
    */
-  private onSection(energy: number): void {
+  private onSection(startSec: number, energy: number): void {
+    // Director plan takes precedence over the energy-band heuristic.
+    if (this.directorPlan) {
+      const entry = this.directorPlan.scenePlan.find((e) => Math.abs(e.startSec - startSec) < 2);
+      if (entry) {
+        const target = this.scenes.findIndex((s) => s.name === entry.scene);
+        if (target >= 0) this.switchTo(target);
+        return;
+      }
+    }
     if (this.lastSwitchEnergy >= 0 && Math.abs(energy - this.lastSwitchEnergy) < 0.18) return;
     this.lastSwitchEnergy = energy;
     // Two candidates per energy band; prefer whichever isn't already up.
@@ -94,7 +128,7 @@ export class SceneManager {
         this.pendingIndex = null;
         this.active.setVisible(true);
         this.conductor?.setScene(this.active);
-        this.conductor?.setConfig(DEFAULT_CONFIGS[this.active.name] ?? { mappings: [] });
+        this.conductor?.setConfig(this.configFor(this.active.name));
         this.onSceneChanged?.(this.active);
       }
     } else if (this.fade < 1) {

@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { analyzeInWorker, cacheAnalysis, getCachedAnalysis, sha256Hex } from './analysis';
 import { extractPalette } from './analysis/palette';
+import { requestDirectorPlan } from './conductor/director';
 import { Attractor } from './scenes/attractor';
 import { PostStack } from './post/pipeline';
 import { FilePlayer } from './audio/file-player';
@@ -38,6 +39,7 @@ const debugState = {
   sceneName: '',
   signals: { pulse: 0, inhale: 0, drop: 0 },
   seek: null as ((sec: number) => void) | null,
+  directorMood: '',
 };
 (window as unknown as Record<string, unknown>).__resonance = debugState;
 
@@ -95,6 +97,28 @@ async function boot(): Promise<void> {
   const post = new PostStack(renderer, scene, camera);
   const panel = new DevPanel(manager);
   let trackName = '';
+  let directorToken = 0;
+
+  async function maybeRunDirector(analysis: SongAnalysis): Promise<void> {
+    const { apiKey, enabled, model } = panel.director;
+    if (!enabled || !apiKey) return;
+    const token = ++directorToken;
+    panel.setDirectorStatus('thinking…');
+    try {
+      const plan = await requestDirectorPlan(analysis, trackName, manager.sceneSpecs, {
+        apiKey,
+        model,
+      });
+      if (token !== directorToken) return; // a newer track superseded us
+      manager.applyDirectorPlan(plan);
+      debugState.directorMood = plan.mood;
+      panel.setDirectorStatus(`✓ ${plan.mood}`);
+    } catch (err) {
+      if (token === directorToken) {
+        panel.setDirectorStatus(`error: ${err instanceof Error ? err.message.slice(0, 60) : err}`);
+      }
+    }
+  }
 
   let player: FilePlayer | null = null;
   let live: LiveProvider | null = null;
@@ -189,6 +213,8 @@ async function boot(): Promise<void> {
       trackName = file.name.replace(/\.[^.]+$/, '');
       document.title = `resonance — ${trackName}`;
       panel.setAnalysis(trackName, analysis);
+      manager.clearDirectorPlan();
+      void maybeRunDirector(analysis);
     } catch (err) {
       setStatus(`failed to load: ${err instanceof Error ? err.message : err}`);
       console.error(err);
