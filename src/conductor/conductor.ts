@@ -13,7 +13,11 @@ export type FeatureSource =
   | 'centroid'
   | 'pulse'
   | 'beatPhase'
-  | 'energyPercentile';
+  | 'energyPercentile'
+  /** Ramps 0→1 in the ~1.2 s before a significantly louder section. */
+  | 'inhale'
+  /** Fires 1 the moment that louder section lands; fast decay. */
+  | 'drop';
 
 export type Curve = 'linear' | 'pow2' | 'sqrt';
 
@@ -50,7 +54,10 @@ export class Conductor {
   private scene: VisualScene;
   private state: MappingState[] = [];
   private pulse = 0;
+  private inhale = 0;
+  private drop = 0;
   private lastSectionStart = -1;
+  private lastSectionEnergy = 0;
 
   /** Fires when playback crosses a section boundary. */
   onSectionChange: ((sectionStart: number, energy: number) => void) | null = null;
@@ -77,15 +84,38 @@ export class Conductor {
     }));
   }
 
+  /** Derived signals, exposed for the post stack. */
+  get signals(): { pulse: number; inhale: number; drop: number } {
+    return { pulse: this.pulse, inhale: this.inhale, drop: this.drop };
+  }
+
   update(f: FrameFeatures, dt: number): void {
     if (f.onset) this.pulse = 1;
     else this.pulse *= Math.exp(-dt * (this.config.pulseDecay ?? 5));
 
+    // Drop anticipation: a meaningfully louder section is imminent.
+    const INHALE_WINDOW = 1.2;
+    const energyJump =
+      f.section !== null && f.nextSectionEnergy !== null
+        ? f.nextSectionEnergy - f.section.energy
+        : 0;
+    if (energyJump > 0.12 && f.nextSectionIn !== null && f.nextSectionIn < INHALE_WINDOW) {
+      this.inhale = Math.min(1, (INHALE_WINDOW - f.nextSectionIn) / INHALE_WINDOW + 0.2);
+    } else {
+      this.inhale = Math.max(0, this.inhale - dt * 4);
+    }
+
     if (f.section && f.section.startSec !== this.lastSectionStart) {
       const isFirst = this.lastSectionStart === -1;
+      const prevEnergy = this.lastSectionEnergy;
       this.lastSectionStart = f.section.startSec;
-      if (!isFirst) this.onSectionChange?.(f.section.startSec, f.section.energy);
+      this.lastSectionEnergy = f.section.energy;
+      if (!isFirst) {
+        if (f.section.energy - prevEnergy > 0.12) this.drop = 1;
+        this.onSectionChange?.(f.section.startSec, f.section.energy);
+      }
     }
+    this.drop *= Math.exp(-dt * 3);
 
     for (let i = 0; i < this.config.mappings.length; i++) {
       const m = this.config.mappings[i];
@@ -124,6 +154,10 @@ export class Conductor {
         return f.beatPhase;
       case 'energyPercentile':
         return f.energyPercentile;
+      case 'inhale':
+        return this.inhale;
+      case 'drop':
+        return this.drop;
     }
   }
 }

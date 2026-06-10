@@ -35,6 +35,8 @@ export class Boids implements VisualScene {
     scatter: { default: 0, min: 0, max: 1 },
     brightness: { default: 0.8, min: 0, max: 2.5 },
     fade: { default: 1, min: 0, max: 1 },
+    inhale: { default: 0, min: 0, max: 1 },
+    burst: { default: 0, min: 0, max: 1 },
   };
 
   private uCohesion = uniform(this.params.cohesion.default);
@@ -44,6 +46,8 @@ export class Boids implements VisualScene {
   private uScatter = uniform(0);
   private uBrightness = uniform(this.params.brightness.default);
   private uFade = uniform(1);
+  private uInhale = uniform(0);
+  private uBurst = uniform(0);
   private uDelta = uniform(0.016);
   private uColorA = uniform(color('#7ad9ff'));
   private uColorB = uniform(color('#ffd166'));
@@ -61,6 +65,8 @@ export class Boids implements VisualScene {
       scatter: this.uScatter,
       brightness: this.uBrightness,
       fade: this.uFade,
+      inhale: this.uInhale,
+      burst: this.uBurst,
     }[name];
     if (u) u.value = value;
   }
@@ -114,12 +120,14 @@ export class Boids implements VisualScene {
       If(count.greaterThan(0), () => {
         const cohesionForce = cohSum.div(count).sub(pos).normalize();
         const alignForce = aliSum.div(count).normalize();
-        // Scatter inverts cohesion and boosts separation — the "drop" gesture.
-        const cohSign = float(1).sub(this.uScatter.mul(2.2));
-        vel.addAssign(cohesionForce.mul(this.uCohesion).mul(cohSign).mul(this.uDelta.mul(8)));
+        // Inhale pulls the flock tight; scatter/burst blow it apart.
+        const scatterTotal = this.uScatter.add(this.uBurst).min(1.2);
+        const cohStrength = this.uCohesion.mul(float(1).add(this.uInhale.mul(2)));
+        const cohSign = float(1).sub(scatterTotal.mul(2.2));
+        vel.addAssign(cohesionForce.mul(cohStrength).mul(cohSign).mul(this.uDelta.mul(8)));
         vel.addAssign(alignForce.mul(this.uAlignment).mul(this.uDelta.mul(6)));
         vel.addAssign(
-          sepSum.mul(this.uSeparation.add(this.uScatter.mul(1.5))).mul(this.uDelta.mul(10)),
+          sepSum.mul(this.uSeparation.add(scatterTotal.mul(1.5))).mul(this.uDelta.mul(10)),
         );
       });
 
@@ -131,7 +139,10 @@ export class Boids implements VisualScene {
 
       // Clamp speed band so the flock never stalls or explodes.
       const speed = vel.length().max(0.001);
-      const maxSpeed = float(5.5).mul(this.uSpeed).add(this.uScatter.mul(4));
+      const maxSpeed = float(5.5)
+        .mul(this.uSpeed)
+        .mul(float(1).sub(this.uInhale.mul(0.55)))
+        .add(this.uScatter.add(this.uBurst).mul(4));
       const minSpeed = float(1.2).mul(this.uSpeed);
       vel.assign(vel.div(speed).mul(speed.clamp(minSpeed, maxSpeed)));
 

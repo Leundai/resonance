@@ -34,6 +34,8 @@ export class ParticleField implements VisualScene {
     pulse: { default: 0, min: 0, max: 1 },
     drift: { default: 0.5, min: 0, max: 2 },
     fade: { default: 1, min: 0, max: 1 },
+    inhale: { default: 0, min: 0, max: 1 },
+    burst: { default: 0, min: 0, max: 1 },
   };
 
   private uTime = uniform(0);
@@ -44,6 +46,8 @@ export class ParticleField implements VisualScene {
   private uPulse = uniform(this.params.pulse.default);
   private uDrift = uniform(this.params.drift.default);
   private uFade = uniform(1);
+  private uInhale = uniform(0);
+  private uBurst = uniform(0);
   private uColorA = uniform(color('#4a7cff'));
   private uColorB = uniform(color('#ff5ec4'));
 
@@ -70,6 +74,12 @@ export class ParticleField implements VisualScene {
         break;
       case 'fade':
         this.uFade.value = value;
+        break;
+      case 'inhale':
+        this.uInhale.value = value;
+        break;
+      case 'burst':
+        this.uBurst.value = value;
         break;
     }
   }
@@ -113,11 +123,24 @@ export class ParticleField implements VisualScene {
           .add(vec3(0, this.uTime.mul(this.uDrift.mul(0.1)), this.uTime.mul(0.02))),
       );
 
-      vel.addAssign(flow.mul(this.uTurbulence).mul(this.uDelta));
-      // Spring toward a per-particle shell radius; breathe expands it.
+      // Inhale stills the turbulence; burst whips it.
+      const turb = this.uTurbulence
+        .mul(float(1).sub(this.uInhale.mul(0.7)))
+        .add(this.uBurst.mul(3));
+      vel.addAssign(flow.mul(turb).mul(this.uDelta));
+      // Spring toward a per-particle shell radius; breathe expands it,
+      // inhale contracts it, burst blows it open.
       const len = pos.length().max(0.001);
       const dir = pos.div(len);
-      const targetR = seed.mul(5).add(5).mul(float(1).add(this.uBreathe.mul(0.8)));
+      const targetR = seed
+        .mul(5)
+        .add(5)
+        .mul(
+          float(1)
+            .add(this.uBreathe.mul(0.8))
+            .sub(this.uInhale.mul(0.55))
+            .add(this.uBurst.mul(1.4)),
+        );
       vel.addAssign(dir.mul(targetR.sub(len)).mul(0.6).mul(this.uDelta));
       vel.mulAssign(float(0.985));
 
@@ -141,7 +164,11 @@ export class ParticleField implements VisualScene {
     const seedAttr = seeds.toAttribute();
     const speed = velocities.toAttribute().length();
     const mixT = smoothstep(0.0, 1.5, speed).add(seedAttr.mul(0.25)).clamp(0, 1);
-    const brightness = this.uBrightness.add(this.uPulse.mul(0.7)).mul(this.uFade);
+    const brightness = this.uBrightness
+      .add(this.uPulse.mul(0.7))
+      .add(this.uBurst.mul(0.9))
+      .mul(float(1).sub(this.uInhale.mul(0.45)))
+      .mul(this.uFade);
     material.colorNode = mix(this.uColorA, this.uColorB, mixT).mul(brightness);
 
     const d = uv().distance(0.5);

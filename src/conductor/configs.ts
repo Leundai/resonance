@@ -13,6 +13,8 @@ export const DEFAULT_CONFIGS: Record<string, ConductorConfig> = {
       { feature: 'level', param: 'brightness', in: [0, 0.5], out: [0.25, 0.9], attack: 0.05, release: 0.3 },
       { feature: 'pulse', param: 'pulse', out: [0, 0.6], attack: 0, release: 0 },
       { feature: 'centroid', param: 'drift', out: [0.2, 1.5], attack: 0.3, release: 0.6 },
+      { feature: 'inhale', param: 'inhale', out: [0, 1], attack: 0, release: 0.05 },
+      { feature: 'drop', param: 'burst', out: [0, 1], attack: 0, release: 0.02 },
     ],
   },
   boids: {
@@ -24,6 +26,8 @@ export const DEFAULT_CONFIGS: Record<string, ConductorConfig> = {
       { feature: 'pulse', param: 'scatter', out: [0, 0.9], curve: 'pow2', attack: 0, release: 0 },
       { feature: 'level', param: 'brightness', in: [0, 0.5], out: [0.4, 1.1], attack: 0.05, release: 0.3 },
       { feature: 'treble', param: 'alignment', in: [0, 0.8], out: [1.4, 0.6], attack: 0.2, release: 0.5 },
+      { feature: 'inhale', param: 'inhale', out: [0, 1], attack: 0, release: 0.05 },
+      { feature: 'drop', param: 'burst', out: [0, 1], attack: 0, release: 0.02 },
     ],
   },
   terrain: {
@@ -33,6 +37,8 @@ export const DEFAULT_CONFIGS: Record<string, ConductorConfig> = {
       { feature: 'centroid', param: 'detail', out: [0.05, 1], attack: 0.3, release: 0.6 },
       { feature: 'level', param: 'scrollSpeed', in: [0, 0.5], out: [0.8, 7], attack: 0.15, release: 0.8 },
       { feature: 'pulse', param: 'glow', out: [0.5, 2.2], attack: 0, release: 0 },
+      { feature: 'inhale', param: 'inhale', out: [0, 1], attack: 0, release: 0.05 },
+      { feature: 'drop', param: 'burst', out: [0, 1], attack: 0, release: 0.02 },
     ],
   },
 };

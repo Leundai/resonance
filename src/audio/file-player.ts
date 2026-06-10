@@ -162,6 +162,7 @@ export class FilePlayer implements AudioFeatureProvider {
       energyPercentile: this.energyPercentile(t),
       section: grid.section,
       nextSectionIn: grid.nextSectionIn,
+      nextSectionEnergy: grid.nextSectionEnergy,
       spectrum: this.spectrumOut,
     };
   }
@@ -172,10 +173,18 @@ export class FilePlayer implements AudioFeatureProvider {
     nextBeatIn: number | null;
     section: Section | null;
     nextSectionIn: number | null;
+    nextSectionEnergy: number | null;
   } {
     const a = this.analysis;
     if (!a || a.beats.length < 2) {
-      return { onset: false, beatPhase: null, nextBeatIn: null, section: null, nextSectionIn: null };
+      return {
+        onset: false,
+        beatPhase: null,
+        nextBeatIn: null,
+        section: null,
+        nextSectionIn: null,
+        nextSectionEnergy: null,
+      };
     }
 
     // Index of the last beat at or before t.
@@ -200,14 +209,17 @@ export class FilePlayer implements AudioFeatureProvider {
 
     let section: Section | null = null;
     let nextSectionIn: number | null = null;
-    for (const sec of a.sections) {
+    let nextSectionEnergy: number | null = null;
+    for (let i = 0; i < a.sections.length; i++) {
+      const sec = a.sections[i];
       if (t >= sec.startSec && t < sec.endSec) {
         section = sec;
         nextSectionIn = sec.endSec - t;
+        nextSectionEnergy = a.sections[i + 1]?.energy ?? null;
         break;
       }
     }
-    return { onset, beatPhase, nextBeatIn, section, nextSectionIn };
+    return { onset, beatPhase, nextBeatIn, section, nextSectionIn, nextSectionEnergy };
   }
 
   private energyPercentile(t: number): number | null {

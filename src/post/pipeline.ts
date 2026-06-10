@@ -1,8 +1,15 @@
 import * as THREE from 'three/webgpu';
-import { pass } from 'three/tsl';
+import { pass, uniform, vec2 } from 'three/tsl';
 import { afterImage } from 'three/addons/tsl/display/AfterImageNode.js';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import { chromaticAberration } from 'three/addons/tsl/display/ChromaticAberrationNode.js';
 import type { FrameFeatures } from '../audio/features';
+
+export interface ConductorSignals {
+  pulse: number;
+  inhale: number;
+  drop: number;
+}
 
 /**
  * TSL post chain (WebGPU-native; EffectComposer doesn't exist here):
@@ -13,6 +20,7 @@ export class PostStack {
   private post: THREE.RenderPipeline;
   private bloomNode: ReturnType<typeof bloom>;
   private afterNode: ReturnType<typeof afterImage>;
+  private uCA = uniform(0);
   private pulse = 0;
 
   constructor(
@@ -30,16 +38,28 @@ export class PostStack {
     ).add(this.bloomNode);
     this.afterNode = afterImage(composite, 0.6);
     this.post = new THREE.RenderPipeline(renderer);
-    this.post.outputNode = this.afterNode;
+    // Chromatic aberration last — it kicks only on drops/transients.
+    this.post.outputNode = chromaticAberration(
+      this.afterNode,
+      this.uCA,
+      vec2(0.5, 0.5),
+      uniform(1.04),
+    );
   }
 
-  update(f: FrameFeatures, dt: number): void {
+  update(f: FrameFeatures, dt: number, signals?: ConductorSignals): void {
     if (f.onset) this.pulse = 1;
     else this.pulse *= Math.exp(-dt * 6);
 
-    setUniform(this.bloomNode.strength, 0.2 + f.level * 0.3 + this.pulse * 0.25);
+    const drop = signals?.drop ?? 0;
+    const inhale = signals?.inhale ?? 0;
+    setUniform(
+      this.bloomNode.strength,
+      (0.2 + f.level * 0.3 + this.pulse * 0.25 + drop * 0.7) * (1 - inhale * 0.5),
+    );
     // Quiet music smears longer; loud music stays crisp.
     setUniform(this.afterNode.damp, 0.42 + (1 - Math.min(f.level * 2, 1)) * 0.18);
+    this.uCA.value = drop * 1.6 + this.pulse * 0.12;
   }
 
   render(): void {

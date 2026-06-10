@@ -31,12 +31,16 @@ export class Terrain implements VisualScene {
     scrollSpeed: { default: 2.5, min: 0, max: 12 },
     glow: { default: 0.7, min: 0, max: 2.5 },
     fade: { default: 1, min: 0, max: 1 },
+    inhale: { default: 0, min: 0, max: 1 },
+    burst: { default: 0, min: 0, max: 1 },
   };
 
   private uAmplitude = uniform(this.params.amplitude.default);
   private uDetail = uniform(this.params.detail.default);
   private uGlow = uniform(this.params.glow.default);
   private uFade = uniform(1);
+  private uInhale = uniform(0);
+  private uBurst = uniform(0);
   private uScroll = uniform(0);
   private uLow = uniform(color('#1a1240'));
   private uHigh = uniform(color('#ff7edb'));
@@ -63,6 +67,12 @@ export class Terrain implements VisualScene {
       case 'fade':
         this.uFade.value = value;
         break;
+      case 'inhale':
+        this.uInhale.value = value;
+        break;
+      case 'burst':
+        this.uBurst.value = value;
+        break;
     }
   }
 
@@ -79,7 +89,9 @@ export class Terrain implements VisualScene {
     const fine = mx_noise_float(p.mul(7.1)).mul(0.22).mul(this.uDetail);
     // Ridge the base octave for valley/crest contrast.
     const ridged = float(1).sub(base.abs().mul(1.6));
-    const h = ridged.mul(0.6).add(mid).add(fine).mul(this.uAmplitude);
+    // Inhale flattens the world; the drop slams it back up.
+    const dropShape = float(1).sub(this.uInhale.mul(0.6)).add(this.uBurst.mul(0.9));
+    const h = ridged.mul(0.6).add(mid).add(fine).mul(this.uAmplitude).mul(dropShape);
 
     const material = new THREE.MeshBasicNodeMaterial();
     material.positionNode = vec3(positionLocal.x, positionLocal.y, h);
@@ -87,7 +99,7 @@ export class Terrain implements VisualScene {
     const hN = h.div(this.uAmplitude.max(0.001)); // -1..1-ish
     const slope = smoothstep(0.1, 1.05, hN);
     let c = mix(this.uLow, this.uHigh, slope);
-    c = mix(c, this.uPeak, smoothstep(0.8, 1.05, hN).mul(this.uGlow));
+    c = mix(c, this.uPeak, smoothstep(0.8, 1.05, hN).mul(this.uGlow.add(this.uBurst.mul(1.2))));
     // Distance haze toward background.
     const depth = positionView.z.negate();
     const haze = smoothstep(14, 55, depth);

@@ -27,6 +27,8 @@ export interface FrameFeatures {
   section: Section | null;
   /** Seconds until the next section boundary; null when unknown. */
   nextSectionIn: number | null;
+  /** Energy of the UPCOMING section — the drop-anticipation signal. */
+  nextSectionEnergy: number | null;
   /** Raw magnitude spectrum 0..1 for per-bin effects. */
   spectrum: Float32Array;
 }

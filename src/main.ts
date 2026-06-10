@@ -28,6 +28,8 @@ const debugState = {
   frames: 0,
   onsetCount: 0,
   sceneName: '',
+  signals: { pulse: 0, inhale: 0, drop: 0 },
+  seek: null as ((sec: number) => void) | null,
 };
 (window as unknown as Record<string, unknown>).__resonance = debugState;
 
@@ -47,6 +49,7 @@ function idleFeatures(t: number): FrameFeatures {
     energyPercentile: null,
     section: null,
     nextSectionIn: null,
+    nextSectionEnergy: null,
     spectrum: IDLE_SPECTRUM,
   };
 }
@@ -115,6 +118,7 @@ async function boot(): Promise<void> {
       }
 
       await player.play();
+      debugState.seek = (sec: number) => player?.seek(sec);
       hud.classList.add('hidden');
       setStatus('');
       document.title = `resonance — ${file.name.replace(/\.[^.]+$/, '')}`;
@@ -184,7 +188,8 @@ async function boot(): Promise<void> {
       camera.lookAt(0, 0, 0);
     }
 
-    post.update(features, dt);
+    post.update(features, dt, manager.signals);
+    debugState.signals = manager.signals;
     post.render();
   });
 }
