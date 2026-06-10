@@ -34,10 +34,12 @@ export class Physarum implements VisualScene {
   readonly name = 'physarum';
 
   readonly params: Record<string, ParamSpec> = {
+    // Jones-regime tuning: step size must stay well under the sensor
+    // offset (16 texels) or agents overshoot lanes and blob up.
     sensorAngle: { default: 0.5, min: 0.15, max: 1.2 },
-    turnSpeed: { default: 3.2, min: 0.5, max: 8 },
-    moveSpeed: { default: 0.045, min: 0.005, max: 0.14 },
-    decay: { default: 0.965, min: 0.86, max: 0.995 },
+    turnSpeed: { default: 0.45, min: 0.1, max: 2 },
+    moveSpeed: { default: 0.006, min: 0.002, max: 0.02 },
+    decay: { default: 0.968, min: 0.86, max: 0.995 },
     brightness: { default: 0.9, min: 0, max: 2.5 },
     fade: { default: 1, min: 0, max: 1 },
     inhale: { default: 0, min: 0, max: 1 },
@@ -114,11 +116,11 @@ export class Physarum implements VisualScene {
     const headings = instancedArray(AGENTS, 'float');
 
     const initCompute = Fn(() => {
-      const a = hash(instanceIndex).mul(Math.PI * 2);
-      const r = hash(instanceIndex.add(917)).sqrt().mul(0.25);
+      // Uniform spread: the network condenses everywhere at once instead
+      // of growing a symmetric mandala out of a center disc.
       positions
         .element(instanceIndex)
-        .assign(vec2(0.5, 0.5).add(vec2(a.cos(), a.sin()).mul(r)));
+        .assign(vec2(hash(instanceIndex), hash(instanceIndex.add(917))));
       headings.element(instanceIndex).assign(hash(instanceIndex.add(31)).mul(Math.PI * 2));
     })().compute(AGENTS);
 
@@ -126,7 +128,7 @@ export class Physarum implements VisualScene {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sense = (pos: any, angle: any) => {
       const dir = vec2(angle.cos(), angle.sin());
-      const samplePos = pos.add(dir.mul(16 / RES)).fract();
+      const samplePos = pos.add(dir.mul(9 / RES)).fract();
       return this.trailRead.sample(samplePos).r;
     };
 
@@ -149,7 +151,7 @@ export class Physarum implements VisualScene {
       // Constant small jitter prevents total collapse into one blob;
       // bursts shatter the field on drops.
       const jitter = hash(instanceIndex.add(this.uSeed)).sub(0.5);
-      heading.addAssign(jitter.mul(this.uBurst.mul(2.5).add(0.16)));
+      heading.addAssign(jitter.mul(this.uBurst.mul(2.5).add(0.42)));
 
       const speed = this.uMoveSpeed.mul(float(1).sub(this.uInhale.mul(0.85)));
       const dir = vec2(heading.cos(), heading.sin());
@@ -167,7 +169,10 @@ export class Physarum implements VisualScene {
       positions.toAttribute().mul(2).sub(vec2(1, 1)),
       0,
     );
-    depositMat.colorNode = vec4(0.2, 0.2, 0.2, 1);
+    // Equilibrium math: field mean ~= agents*deposit/texels/decayRate.
+    // Keep the mean near 0.15 so only converged lanes (5-10x mean)
+    // clear the display threshold — that's the filigree.
+    depositMat.colorNode = vec4(0.025, 0.025, 0.025, 1);
     depositMat.scaleNode = float(2 / RES);
     const depositMesh = new THREE.InstancedMesh(
       new THREE.PlaneGeometry(1, 1),
@@ -192,7 +197,7 @@ export class Physarum implements VisualScene {
       const blurred = sum.div(9);
       // Clamp accumulation: converged lanes otherwise grow unbounded
       // and the whole field saturates to white.
-      const v = mix(center, blurred, 0.35).mul(this.uDecay).clamp(0, 1.2);
+      const v = mix(center, blurred, 0.3).mul(this.uDecay).clamp(0, 1.2);
       return vec4(v, v, v, 1);
     })();
     const diffuseQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), diffuseMat);
@@ -203,14 +208,16 @@ export class Physarum implements VisualScene {
     const displayMat = new THREE.MeshBasicNodeMaterial();
     displayMat.colorNode = Fn(() => {
       const aspect = screenSize.x.div(screenSize.y);
-      const p = screenUV.sub(vec2(0.5, 0.5)).mul(vec2(aspect, 1)).mul(0.85).add(vec2(0.5, 0.5));
+      const p = screenUV.sub(vec2(0.5, 0.5)).mul(vec2(aspect, 1)).mul(0.9).add(vec2(0.5, 0.5));
       const raw = this.displayRead.sample(p.fract()).r;
       // Reinhard tone-map: dense lanes glow, never white-out the field.
       const t = raw.div(raw.mul(0.8).add(1));
-      const body = smoothstep(0.04, 0.6, t);
-      const c = mix(this.uLow.mul(0.2), this.uHigh, body);
-      const hot = smoothstep(0.45, 0.72, t);
-      return mix(c, this.uPeak, hot.mul(0.55)).mul(this.uBrightness).mul(this.uFade);
+      // Wider ramp keeps lane interiors graded instead of slamming to
+      // full bright — that's what made trails read as fat trunks.
+      const body = smoothstep(0.16, 0.78, t);
+      const c = mix(this.uLow.mul(0.15), this.uHigh, body);
+      const hot = smoothstep(0.5, 0.8, t);
+      return mix(c, this.uPeak, hot.mul(0.6)).mul(this.uBrightness).mul(this.uFade);
     })();
     const displayMesh = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), displayMat);
     displayMesh.frustumCulled = false;
