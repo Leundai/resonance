@@ -85,6 +85,7 @@ export class Attractor implements VisualScene {
 
     const positions = instancedArray(COUNT, 'vec3');
     const seeds = instancedArray(COUNT, 'float');
+    const speeds = instancedArray(COUNT, 'float');
 
     const respawn = (seedOffset: number) => {
       const a = hash(instanceIndex.add(seedOffset)).mul(Math.PI * 2);
@@ -181,6 +182,9 @@ export class Attractor implements VisualScene {
         .mul(float(1).sub(this.uInhale.mul(0.85)))
         .mul(seed.mul(0.4).add(0.8));
       pos.addAssign(v.mul(this.uDelta).mul(speed));
+      speeds
+        .element(instanceIndex)
+        .assign((v as unknown as ReturnType<typeof vec3>).length());
 
       // Drop: radial shove outward.
       const len = pos.length().max(0.001);
@@ -201,9 +205,14 @@ export class Attractor implements VisualScene {
     material.positionNode = positions.toAttribute();
 
     const seedAttr = seeds.toAttribute();
-    const radial = positions.toAttribute().length().div(14);
-    const mixT = radial.add(seedAttr.mul(0.3)).clamp(0, 1);
-    const brightness = this.uBrightness.add(this.uPulse.mul(0.5)).add(this.uBurst.mul(0.8));
+    // Velocity coloring: the attractor's dynamics become the gradient —
+    // fast inner orbits burn toward the accent, slow drifts stay deep.
+    const speedT = smoothstep(0.2, 2.6, speeds.toAttribute());
+    const mixT = speedT.add(seedAttr.mul(0.2)).clamp(0, 1);
+    const brightness = this.uBrightness
+      .add(this.uPulse.mul(0.5))
+      .add(this.uBurst.mul(0.8))
+      .mul(speedT.mul(0.9).add(0.35));
     material.colorNode = mix(this.uColorA, this.uColorB, mixT).mul(brightness).mul(this.uFade);
     const d = uv().distance(0.5);
     material.opacityNode = smoothstep(0.5, 0.08, d)

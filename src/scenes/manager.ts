@@ -6,7 +6,8 @@ import { DEFAULT_CONFIGS } from '../conductor/configs';
 import type { DirectorPlan, SceneSpec } from '../conductor/director';
 import type { SceneContext, VisualScene } from './scene';
 
-const FADE_SEC = 0.7;
+const FADE_CALM = 1.1;
+const FADE_DROP = 0.22;
 
 /**
  * Owns all scenes (kept initialized; visibility-toggled), the active
@@ -17,6 +18,7 @@ export class SceneManager {
   private activeIndex = 0;
   private pendingIndex: number | null = null;
   private fade = 1; // 1 = fully visible, dips to 0 mid-transition
+  private fadeSec = FADE_CALM;
   private conductor: Conductor | null = null;
   /** Energy of the section we last switched on. */
   private lastSwitchEnergy = -1;
@@ -191,6 +193,9 @@ export class SceneManager {
     }
     if (index === this.activeIndex || index < 0 || index >= this.scenes.length) return;
     this.pendingIndex = index;
+    // Drops cut hard; calm switches dissolve.
+    const drop = this.conductor?.signals.drop ?? 0;
+    this.fadeSec = drop > 0.4 ? FADE_DROP : FADE_CALM;
   }
 
   setAutoRotate(on: boolean): void {
@@ -236,7 +241,7 @@ export class SceneManager {
   update(features: FrameFeatures, dt: number): void {
     // Fade out toward a pending switch, then flip visibility and fade in.
     if (this.pendingIndex !== null) {
-      this.fade = Math.max(0, this.fade - dt / FADE_SEC);
+      this.fade = Math.max(0, this.fade - dt / this.fadeSec);
       if (this.fade === 0) {
         this.active.setVisible(false);
         this.activeIndex = this.pendingIndex;
@@ -247,7 +252,7 @@ export class SceneManager {
         this.onSceneChanged?.(this.active);
       }
     } else if (this.fade < 1) {
-      this.fade = Math.min(1, this.fade + dt / FADE_SEC);
+      this.fade = Math.min(1, this.fade + dt / this.fadeSec);
     }
 
     this.conductor?.update(features, dt);
