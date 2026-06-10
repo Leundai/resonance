@@ -51,6 +51,16 @@ export const DEFAULT_CONFIGS: Record<string, ConductorConfig> = {
       { feature: 'drop', param: 'burst', out: [0, 1], attack: 0, release: 0.02 },
     ],
   },
+  kifs: {
+    pulseDecay: 5,
+    mappings: [
+      { feature: 'centroid', param: 'foldDrift', out: [0.008, 0.09], attack: 0.4, release: 0.8 },
+      { feature: 'bass', param: 'twist', out: [0, 1], curve: 'sqrt', attack: 0.06, release: 0.4 },
+      { feature: 'level', param: 'brightness', in: [0, 0.5], out: [0.45, 0.95], attack: 0.05, release: 0.3 },
+      { feature: 'inhale', param: 'inhale', out: [0, 1], attack: 0, release: 0.05 },
+      { feature: 'drop', param: 'burst', out: [0, 1], attack: 0, release: 0.02 },
+    ],
+  },
   physarum: {
     pulseDecay: 5,
     mappings: [

@@ -9,6 +9,7 @@ import type { FrameFeatures } from './audio/features';
 import { LiveProvider, type LiveSource } from './audio/live-provider';
 import { Boids } from './scenes/boids';
 import { Fractal } from './scenes/fractal';
+import { Kifs } from './scenes/kifs';
 import { SceneManager } from './scenes/manager';
 import { ParticleField } from './scenes/particles';
 import { Physarum } from './scenes/physarum';
@@ -92,6 +93,7 @@ async function boot(): Promise<void> {
     new Fractal(),
     new Physarum(),
     new Attractor(),
+    new Kifs(),
   ]);
   debugState.sceneName = manager.active.name;
   const post = new PostStack(renderer, scene, camera);
@@ -255,7 +257,7 @@ async function boot(): Promise<void> {
       hud.classList.toggle('hidden', player.isPlaying);
     }
     const digit = Number(e.key);
-    if (digit >= 1 && digit <= 6) manager.switchTo(digit - 1);
+    if (digit >= 1 && digit <= 7) manager.switchTo(digit - 1);
   });
 
   let last = performance.now();

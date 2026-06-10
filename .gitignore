@@ -1,2 +1,4 @@
 test-audio/
 node_modules/
+.env
+dist/
