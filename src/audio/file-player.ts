@@ -1,5 +1,5 @@
 import type { AudioFeatureProvider, FrameFeatures } from './features';
-import type { Palette } from '../types/song-analysis';
+import type { Palette, Section, SongAnalysis } from '../types/song-analysis';
 
 /**
  * Decoded-file playback with realtime FFT features. This is the playback
@@ -24,6 +24,10 @@ export class FilePlayer implements AudioFeatureProvider {
   palette: Palette | null = null;
   onEnded: (() => void) | null = null;
 
+  private analysis: SongAnalysis | null = null;
+  private lastBeatIndex = -1;
+  private sortedEnergy: Float32Array | null = null;
+
   constructor() {
     this.ctx = new AudioContext();
     this.analyser = this.ctx.createAnalyser();
@@ -45,6 +49,13 @@ export class FilePlayer implements AudioFeatureProvider {
 
   get duration(): number {
     return this.buffer?.duration ?? 0;
+  }
+
+  attachAnalysis(analysis: SongAnalysis): void {
+    this.analysis = analysis;
+    this.palette = analysis.palette;
+    this.lastBeatIndex = -1;
+    this.sortedEnergy = Float32Array.from(analysis.curves.energy).sort();
   }
 
   get isPlaying(): boolean {
@@ -135,21 +146,85 @@ export class FilePlayer implements AudioFeatureProvider {
     smooth(s, 'treble', treble);
     smooth(s, 'centroid', centroid);
 
+    const t = this.currentTime;
+    const grid = this.beatGrid(t);
+
     return {
-      time: this.currentTime,
+      time: t,
       level: s.level,
       bass: s.bass,
       mid: s.mid,
       treble: s.treble,
       centroid: s.centroid,
-      onset: false,
-      beatPhase: null,
-      nextBeatIn: null,
-      energyPercentile: null,
-      section: null,
-      nextSectionIn: null,
+      onset: grid.onset,
+      beatPhase: grid.beatPhase,
+      nextBeatIn: grid.nextBeatIn,
+      energyPercentile: this.energyPercentile(t),
+      section: grid.section,
+      nextSectionIn: grid.nextSectionIn,
       spectrum: this.spectrumOut,
     };
+  }
+
+  private beatGrid(t: number): {
+    onset: boolean;
+    beatPhase: number | null;
+    nextBeatIn: number | null;
+    section: Section | null;
+    nextSectionIn: number | null;
+  } {
+    const a = this.analysis;
+    if (!a || a.beats.length < 2) {
+      return { onset: false, beatPhase: null, nextBeatIn: null, section: null, nextSectionIn: null };
+    }
+
+    // Index of the last beat at or before t.
+    let lo = 0;
+    let hi = a.beats.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (a.beats[mid] <= t) lo = mid;
+      else hi = mid - 1;
+    }
+    const beatIndex = a.beats[lo] <= t ? lo : -1;
+
+    const prev = beatIndex >= 0 ? a.beats[beatIndex] : 0;
+    const next = a.beats[Math.min(beatIndex + 1, a.beats.length - 1)];
+    const span = Math.max(next - prev, 1e-3);
+    const beatPhase = Math.min(1, Math.max(0, (t - prev) / span));
+    const nextBeatIn = Math.max(0, next - t);
+
+    // Fire onset exactly once per beat crossing (and not on seek jumps).
+    const onset = beatIndex !== this.lastBeatIndex && beatIndex >= 0 && t - prev < 0.1;
+    if (beatIndex !== this.lastBeatIndex) this.lastBeatIndex = beatIndex;
+
+    let section: Section | null = null;
+    let nextSectionIn: number | null = null;
+    for (const sec of a.sections) {
+      if (t >= sec.startSec && t < sec.endSec) {
+        section = sec;
+        nextSectionIn = sec.endSec - t;
+        break;
+      }
+    }
+    return { onset, beatPhase, nextBeatIn, section, nextSectionIn };
+  }
+
+  private energyPercentile(t: number): number | null {
+    const a = this.analysis;
+    const sorted = this.sortedEnergy;
+    if (!a || !sorted || sorted.length === 0) return null;
+    const idx = Math.min(a.curves.energy.length - 1, Math.floor(t / a.curves.hopSec));
+    const value = a.curves.energy[idx];
+    // Rank via binary search in the sorted copy.
+    let lo = 0;
+    let hi = sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (sorted[mid] <= value) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo / sorted.length;
   }
 
   private bandMean(loHz: number, hiHz: number, binHz: number): number {

@@ -31,6 +31,7 @@ export class ParticleField implements VisualScene {
   private uBass = uniform(0);
   private uTreble = uniform(0);
   private uLevel = uniform(0);
+  private uPulse = uniform(0);
   private uColorA = uniform(color('#4a7cff'));
   private uColorB = uniform(color('#ff5ec4'));
 
@@ -104,14 +105,14 @@ export class ParticleField implements VisualScene {
     const seedAttr = seeds.toAttribute();
     const speed = velocities.toAttribute().length();
     const mixT = smoothstep(0.0, 1.5, speed).add(seedAttr.mul(0.25)).clamp(0, 1);
-    const brightness = float(0.35).add(this.uLevel.mul(1.4));
+    const brightness = float(0.35).add(this.uLevel.mul(1.4)).add(this.uPulse.mul(0.7));
     material.colorNode = mix(this.uColorA, this.uColorB, mixT).mul(brightness);
 
     const d = uv().distance(0.5);
     material.opacityNode = smoothstep(0.5, 0.05, d).mul(float(0.25).add(this.uLevel.mul(0.6)));
     material.scaleNode = float(0.08)
       .add(seedAttr.mul(0.06))
-      .mul(float(1).add(this.uBass.mul(1.2)));
+      .mul(float(1).add(this.uBass.mul(1.2)).add(this.uPulse.mul(0.4)));
 
     const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), material, COUNT);
     mesh.frustumCulled = false;
@@ -128,6 +129,9 @@ export class ParticleField implements VisualScene {
     this.uBass.value = f.bass;
     this.uTreble.value = f.treble;
     this.uLevel.value = f.level;
+    // Beat-grid pulse: instant attack, exponential release.
+    if (f.onset) this.uPulse.value = 1;
+    else this.uPulse.value *= Math.exp(-dt * 5);
     this.ctx.renderer.compute(this.updateCompute as Parameters<THREE.WebGPURenderer['compute']>[0]);
   }
 

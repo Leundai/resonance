@@ -1,8 +1,10 @@
 import * as THREE from 'three/webgpu';
+import { analyzeInWorker, cacheAnalysis, getCachedAnalysis, sha256Hex } from './analysis';
 import { FilePlayer } from './audio/file-player';
 import type { FrameFeatures } from './audio/features';
 import { ParticleField } from './scenes/particles';
 import type { SceneContext } from './scenes/scene';
+import type { SongAnalysis } from './types/song-analysis';
 
 const app = document.getElementById('app')!;
 const hud = document.getElementById('hud')!;
@@ -13,9 +15,13 @@ const IDLE_SPECTRUM = new Float32Array(1024);
 /** Inspection hook for automated validation (chrome-devtools MCP). */
 const debugState = {
   features: null as FrameFeatures | null,
+  analysis: null as SongAnalysis | null,
+  analysisMs: 0,
+  analysisCached: false,
   playing: false,
   time: 0,
   frames: 0,
+  onsetCount: 0,
 };
 (window as unknown as Record<string, unknown>).__resonance = debugState;
 
@@ -73,14 +79,31 @@ async function boot(): Promise<void> {
   async function loadFile(file: File): Promise<void> {
     setStatus(`decoding ${file.name}…`);
     try {
+      const bytes = await file.arrayBuffer();
+      const hash = await sha256Hex(bytes);
       player ??= new FilePlayer();
-      await player.load(await file.arrayBuffer());
+      const audioBuffer = await player.load(bytes); // detaches `bytes`
+
+      const t0 = performance.now();
+      let analysis = await getCachedAnalysis(hash);
+      debugState.analysisCached = analysis !== null;
+      if (!analysis) {
+        analysis = await analyzeInWorker(audioBuffer, hash, (p) => {
+          setStatus(`analyzing — ${p.stage} ${Math.round(('pct' in p ? p.pct : 0) * 100)}%`);
+        });
+        await cacheAnalysis(analysis);
+      }
+      debugState.analysisMs = performance.now() - t0;
+      debugState.analysis = analysis;
+      player.attachAnalysis(analysis);
+
       await player.play();
       hud.classList.add('hidden');
       setStatus('');
       document.title = `resonance — ${file.name.replace(/\.[^.]+$/, '')}`;
     } catch (err) {
       setStatus(`failed to load: ${err instanceof Error ? err.message : err}`);
+      console.error(err);
     }
   }
 
@@ -128,6 +151,7 @@ async function boot(): Promise<void> {
       player && player.isPlaying ? player.frame() : idleFeatures(elapsed);
     particles.update(features, dt);
     debugState.features = features;
+    if (features.onset) debugState.onsetCount++;
     debugState.playing = player?.isPlaying ?? false;
     debugState.time = player?.currentTime ?? 0;
     debugState.frames++;
