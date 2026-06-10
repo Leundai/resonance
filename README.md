@@ -63,6 +63,13 @@ Everything runs client-side. Analysis results cache in IndexedDB by content hash
 - `src/conductor/` — feature→parameter mappings as *data* (range/curve/attack/release) + derived signals; the director emits configs into this layer
 - `src/scenes/` — each scene declares typed params; the conductor (or your sliders) drives them
 
+## Demo track
+
+The one-click demo plays **"Adventures" by [A Himitsu](https://www.youtube.com/channel/UCgFwu-j5-xNJml2FtTrrB3A)**
+(Creative Commons — Attribution 3.0 Unported — CC BY 3.0, released by
+[Argofox](https://youtu.be/8BXNwnxaVQE)), shipped with a precomputed neural analysis so it
+starts instantly.
+
 ## Run locally
 
 ```sh

@@ -84,6 +84,22 @@
       #toast.visible {
         opacity: 0.9;
       }
+      #demo-btn {
+        pointer-events: auto;
+        background: rgba(178, 158, 255, 0.12);
+        border: 1px solid rgba(178, 158, 255, 0.4);
+        color: #e8e8f0;
+        font: inherit;
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        padding: 8px 18px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      #demo-btn:hover {
+        background: rgba(178, 158, 255, 0.28);
+      }
       #now-playing {
         position: fixed;
         left: 16px;
@@ -107,6 +123,7 @@
     <div id="app"></div>
     <div id="hud">
       <div id="drop-hint">drop a song · O to open · L live system audio · M live input</div>
+      <button id="demo-btn">▶ play demo — Adventures by A Himitsu</button>
       <div id="progress-wrap"><div id="progress-bar"></div></div>
       <div id="status"></div>
     </div>

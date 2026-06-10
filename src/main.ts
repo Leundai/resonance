@@ -16,6 +16,7 @@ import { Physarum } from './scenes/physarum';
 import type { SceneContext } from './scenes/scene';
 import { Terrain } from './scenes/terrain';
 import type { SongAnalysis } from './types/song-analysis';
+import { SONG_ANALYSIS_VERSION } from './types/song-analysis';
 import { DevPanel } from './ui/panel';
 
 const app = document.getElementById('app')!;
@@ -246,6 +247,34 @@ async function boot(): Promise<void> {
       uiLoading = false;
     }
   }
+
+  async function loadDemo(): Promise<void> {
+    try {
+      setStatus('fetching demo…');
+      const [analysisRes, mp3Res] = await Promise.all([
+        fetch('presets/adventures.analysis.json'),
+        fetch('presets/adventures.mp3'),
+      ]);
+      // Prime the cache so loadFile takes the instant path. Curves
+      // serialize as plain arrays; rebuild the typed arrays.
+      if (analysisRes.ok) {
+        const raw = (await analysisRes.json()) as SongAnalysis & {
+          curves: Record<string, number[] | number>;
+        };
+        if (raw.version === SONG_ANALYSIS_VERSION) {
+          for (const k of ['energy', 'bass', 'mid', 'treble', 'centroid', 'flux'] as const) {
+            raw.curves[k] = new Float32Array(raw.curves[k] as unknown as number[]) as never;
+          }
+          await cacheAnalysis(raw as SongAnalysis);
+        }
+      }
+      const blob = await mp3Res.blob();
+      await loadFile(new File([blob], 'Adventures — A Himitsu.mp3', { type: 'audio/mpeg' }));
+    } catch (err) {
+      setStatus(`demo failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+  document.getElementById('demo-btn')?.addEventListener('click', () => void loadDemo());
 
   // Drag & drop
   window.addEventListener('dragover', (e) => {
