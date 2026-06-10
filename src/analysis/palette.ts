@@ -1,5 +1,29 @@
 import { Vibrant } from 'node-vibrant/browser';
-import type { Palette } from '../types/song-analysis';
+import type { Emotion, Palette } from '../types/song-analysis';
+
+/**
+ * Synthetic palette for tracks without cover art: valence picks the hue
+ * (indigo → magenta → warm amber), arousal drives saturation.
+ */
+export function emotionPalette(e: Emotion): Palette {
+  const hue = (250 + e.valence * 145) % 360;
+  const sat = 0.45 + e.arousal * 0.4;
+  const primary = hslHex(hue, sat, 0.62);
+  const accent = hslHex((hue + 25) % 360, Math.min(1, sat + 0.1), 0.75);
+  const secondary = hslHex((hue + 330) % 360, sat * 0.6, 0.5);
+  const background = hslHex(hue, sat * 0.5, 0.07);
+  return { background, primary, secondary, accent, swatches: [primary, accent, secondary], coverArtUrl: null };
+}
+
+function hslHex(h: number, s: number, l: number): string {
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number): number => {
+    const k = (n + h / 30) % 12;
+    return l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
+  };
+  const to255 = (x: number): number => Math.round(x * 255);
+  return `#${((to255(f(0)) << 16) | (to255(f(8)) << 8) | to255(f(4))).toString(16).padStart(6, '0')}`;
+}
 
 /**
  * Extract a palette from ID3v2-embedded cover art (APIC frame).

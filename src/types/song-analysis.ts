@@ -5,7 +5,7 @@
  * conductor, scenes, the loading visual — only ever read this shape.
  */
 
-export const SONG_ANALYSIS_VERSION = 2;
+export const SONG_ANALYSIS_VERSION = 3;
 
 export interface SongAnalysis {
   version: number;
@@ -26,6 +26,7 @@ export interface SongAnalysis {
   sections: Section[];
   curves: FeatureCurves;
   palette: Palette | null;
+  emotion: Emotion | null;
   /** Reserved: per-stem curves once stem separation lands. */
   stems?: Record<string, FeatureCurves>;
 }
@@ -59,6 +60,22 @@ export interface FeatureCurves {
   centroid: Float32Array;
   /** Spectral flux (novelty), normalized 0..1. */
   flux: Float32Array;
+}
+
+/**
+ * Classical valence/arousal estimate: Krumhansl-Schmuckler key/mode
+ * (valence) + tempo and onset density (arousal). A neural upgrade
+ * (MusiCNN) can swap in behind the same shape.
+ */
+export interface Emotion {
+  /** 0 = dark/sad, 1 = bright/happy. */
+  valence: number;
+  /** 0 = calm, 1 = frenetic. */
+  arousal: number;
+  mode: 'major' | 'minor';
+  key: string;
+  /** Key-detection confidence 0..1. */
+  confidence: number;
 }
 
 export interface Palette {

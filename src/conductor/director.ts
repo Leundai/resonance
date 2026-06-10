@@ -52,10 +52,14 @@ function buildPrompt(analysis: SongAnalysis, trackName: string, scenes: SceneSpe
     )
     .join('\n');
 
+  const emotionLine = analysis.emotion
+    ? `FEEL: ${analysis.emotion.key} ${analysis.emotion.mode} · valence ${analysis.emotion.valence.toFixed(2)} · arousal ${analysis.emotion.arousal.toFixed(2)}\n`
+    : '';
   return `You are the visual director for a music visualizer. Choreograph this song.
 
 TRACK: ${trackName}
 BPM: ${analysis.tempo.bpm} · duration ${analysis.durationSec.toFixed(0)}s
+${emotionLine}
 SECTIONS (energy normalized 0-1 over the song):
 ${sections}
 ENERGY CURVE (32 samples): ${energy}

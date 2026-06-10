@@ -12,7 +12,7 @@ import type { SongAnalysis } from '../types/song-analysis';
 export class DevPanel {
   private pane: Pane;
   private monitor = { fps: 0, pulse: 0, inhale: 0, drop: 0 };
-  private info = { track: '—', bpm: 0, sections: 0 };
+  private info = { track: '—', bpm: 0, sections: 0, key: '—', feel: '—' };
   private settings = { conductor: true, scene: 0 };
   private sceneFolder: FolderApi | null = null;
 
@@ -37,6 +37,8 @@ export class DevPanel {
     song.addBinding(this.info, 'track', { readonly: true });
     song.addBinding(this.info, 'bpm', { readonly: true, format: (v) => v.toFixed(1) });
     song.addBinding(this.info, 'sections', { readonly: true, format: (v) => v.toFixed(0) });
+    song.addBinding(this.info, 'key', { readonly: true });
+    song.addBinding(this.info, 'feel', { readonly: true });
 
     this.pane
       .addBinding(this.settings, 'scene', {
@@ -91,6 +93,11 @@ export class DevPanel {
     this.info.track = track;
     this.info.bpm = analysis.tempo.bpm;
     this.info.sections = analysis.sections.length;
+    const e = analysis.emotion;
+    this.info.key = e ? `${e.key} ${e.mode}` : '—';
+    this.info.feel = e
+      ? `valence ${e.valence.toFixed(2)} · arousal ${e.arousal.toFixed(2)}`
+      : '—';
   }
 
   setDirectorStatus(status: string): void {

@@ -1,6 +1,7 @@
 import { Fft } from './fft';
 import type {
   AnalysisProgress,
+  Emotion,
   FeatureCurves,
   Section,
   SongAnalysis,
@@ -49,6 +50,16 @@ export function analyzeAudio(
   const midHi = Math.floor(2000 / binHz);
   const trebHi = Math.min(FRAME / 2 - 1, Math.floor(8000 / binHz));
 
+  // Pitch-class accumulator for key/mode (bins 80–4000 Hz).
+  const chroma = new Float64Array(12);
+  const chromaLo = Math.max(1, Math.ceil(80 / binHz));
+  const chromaHi = Math.min(FRAME / 2 - 1, Math.floor(4000 / binHz));
+  const pitchClassOfBin = new Int8Array(chromaHi + 1);
+  for (let k = chromaLo; k <= chromaHi; k++) {
+    const midi = 69 + 12 * Math.log2((k * binHz) / 440);
+    pitchClassOfBin[k] = ((Math.round(midi) % 12) + 12) % 12;
+  }
+
   for (let f = 0; f < nFrames; f++) {
     const off = f * HOP;
     for (let i = 0; i < FRAME; i++) frame[i] = mono[off + i] * window[i];
@@ -74,6 +85,8 @@ export function analyzeAudio(
     mid[f] = bandMean(mags, bassHi + 1, midHi);
     treble[f] = bandMean(mags, midHi + 1, trebHi);
 
+    for (let k = chromaLo; k <= chromaHi; k++) chroma[pitchClassOfBin[k]] += mags[k];
+
     const block = Math.floor(f / framesPerBlock);
     for (let b = 0; b < N_BANDS; b++) {
       blockBands[block * N_BANDS + b] += bandMean(mags, bandEdges[b], bandEdges[b + 1] - 1);
@@ -90,9 +103,13 @@ export function analyzeAudio(
   onProgress({ stage: 'beats', pct: 1 });
 
   // Centroid maps to a log scale before normalization (perceptual brightness).
+  let brightnessSum = 0;
   for (let i = 0; i < nFrames; i++) {
     centroid[i] = centroid[i] > 0 ? Math.log2(Math.max(centroid[i], 100) / 100) : 0;
+    brightnessSum += centroid[i];
   }
+  // Absolute brightness 0..1 (log range 100 Hz – ~6.4 kHz center of mass).
+  const brightness = Math.min(1, brightnessSum / nFrames / 6);
   normalizeInPlace(energy);
   normalizeInPlace(bass);
   normalizeInPlace(mid);
@@ -102,6 +119,9 @@ export function analyzeAudio(
 
   const sections = findSections(blockBands, nBlocks, N_BANDS, framesPerBlock * hopSec, energy, hopSec);
   onProgress({ stage: 'sections', pct: 1 });
+
+  const durationSec = mono.length / sampleRate;
+  const emotion = estimateEmotion(chroma, tempo.bpm, onsets.length / durationSec, brightness);
 
   const curves: FeatureCurves = { hopSec, energy, bass, mid, treble, centroid, flux };
   return {
@@ -117,7 +137,62 @@ export function analyzeAudio(
     sections,
     curves,
     palette: null,
+    emotion,
   };
+}
+
+const KEY_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+// Krumhansl-Kessler probe-tone profiles.
+const MAJOR_PROFILE = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
+const MINOR_PROFILE = [6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+
+/**
+ * Classical valence/arousal: mode + brightness → valence; tempo +
+ * onset density → arousal. Crude but honest — and song-relative
+ * features stay out of it so values compare across tracks.
+ */
+function estimateEmotion(
+  chroma: Float64Array,
+  bpm: number,
+  onsetsPerSec: number,
+  brightness: number,
+): Emotion {
+  let bestR = -2;
+  let bestKey = 0;
+  let bestMode: 'major' | 'minor' = 'major';
+  let bestOppositeR = -2;
+  for (const [mode, profile] of [
+    ['major', MAJOR_PROFILE],
+    ['minor', MINOR_PROFILE],
+  ] as const) {
+    for (let root = 0; root < 12; root++) {
+      let r = 0;
+      for (let i = 0; i < 12; i++) r += profile[i] * chroma[(root + i) % 12];
+      if (r > bestR) {
+        if (mode !== bestMode) bestOppositeR = bestR;
+        bestR = r;
+        bestKey = root;
+        bestMode = mode;
+      } else if (mode !== bestMode && r > bestOppositeR) {
+        bestOppositeR = r;
+      }
+    }
+  }
+  const total = chroma.reduce((a, b) => a + b, 0) || 1;
+  const separation = Math.max(0, (bestR - bestOppositeR) / total / 4);
+  const confidence = Math.min(1, separation * 30);
+
+  const majorness = bestMode === 'major' ? 0.5 + confidence * 0.5 : 0.5 - confidence * 0.5;
+  const valence = clamp01(0.15 + majorness * 0.5 + brightness * 0.35);
+  const tempoN = clamp01((bpm - 60) / 120);
+  const onsetN = clamp01((onsetsPerSec - 0.5) / 3.5);
+  const arousal = clamp01(tempoN * 0.55 + onsetN * 0.45);
+
+  return { valence, arousal, mode: bestMode, key: KEY_NAMES[bestKey], confidence };
+}
+
+function clamp01(x: number): number {
+  return Math.min(1, Math.max(0, x));
 }
 
 function hann(n: number): Float32Array {

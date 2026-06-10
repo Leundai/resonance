@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { analyzeInWorker, cacheAnalysis, getCachedAnalysis, sha256Hex } from './analysis';
-import { extractPalette } from './analysis/palette';
+import { emotionPalette, extractPalette } from './analysis/palette';
 import { requestDirectorPlan } from './conductor/director';
 import { Attractor } from './scenes/attractor';
 import { PostStack } from './post/pipeline';
@@ -203,9 +203,12 @@ async function boot(): Promise<void> {
       debugState.analysisMs = performance.now() - t0;
       debugState.analysis = analysis;
       player.attachAnalysis(analysis);
-      if (palette) {
-        manager.applyPalette(palette);
-        scene.background = new THREE.Color(palette.background);
+      // Cover art wins; otherwise the song's emotion paints the room.
+      const effectivePalette =
+        palette ?? (analysis.emotion ? emotionPalette(analysis.emotion) : null);
+      if (effectivePalette) {
+        manager.applyPalette(effectivePalette);
+        scene.background = new THREE.Color(effectivePalette.background);
       }
 
       await player.play();
