@@ -1,8 +1,10 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn,
+  atan,
   color,
   float,
+  hash,
   mix,
   mx_noise_float,
   positionLocal,
@@ -18,7 +20,7 @@ import type { Palette } from '../types/song-analysis';
 import type { ParamSpec, SceneContext, VisualScene } from './scene';
 
 const SIZE = 90;
-const SEGMENTS = 320;
+const SEGMENTS = 448;
 
 /**
  * FBM-displaced plane, domain-scrolled toward the camera — the direct
@@ -55,6 +57,7 @@ export class Terrain implements VisualScene {
   private ship: THREE.Group | null = null;
   private uEngine = uniform(0.6);
   private uSkyFade = uniform(1);
+  private uTime = uniform(0);
   private uShipHull = uniform(color('#4a6a8a'));
   private rollPhase = 0;
   private lastBurst = 0;
@@ -124,10 +127,11 @@ export class Terrain implements VisualScene {
     c = c.add(
       this.uPeak.mul(contour).mul(slope.mul(0.6).add(0.15)).mul(this.uGlow.mul(0.35).add(this.uBurst.mul(0.5))),
     );
-    // Distance haze toward background.
+    // Distance haze toward the palette's deep tone — matches the dome's
+    // horizon band so terrain and sky meet without a seam.
     const depth = positionView.z.negate();
     const haze = smoothstep(14, 55, depth);
-    c = mix(c, color('#050510'), haze);
+    c = mix(c, mix(color('#050510'), this.uLow, 0.55), haze);
     material.colorNode = c.mul(this.uFade);
 
     const geometry = new THREE.PlaneGeometry(SIZE, SIZE, SEGMENTS, SEGMENTS);
@@ -138,31 +142,94 @@ export class Terrain implements VisualScene {
     this.mesh = mesh;
     ctx.scene.add(mesh);
 
-    // ---- Sky: tiny stars + a stylized black hole on the horizon ----
-    const skyMat = new THREE.MeshBasicNodeMaterial();
+    // ---- Sky dome: hash-grid starfield bent around a lensed black hole.
+    // A backside sphere covers every aspect ratio — no edges to cut off.
+    const skyMat = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide });
     skyMat.colorNode = Fn(() => {
-      const u = uv();
-      // Star dust — two octaves of pinprick noise.
-      const s1 = mx_noise_float(vec3(u.x.mul(180), u.y.mul(70), 1.3)).max(0).pow(9).mul(0.9);
-      const s2 = mx_noise_float(vec3(u.x.mul(420), u.y.mul(160), 7.7)).max(0).pow(12).mul(0.6);
-      const stars = vec3(s1.add(s2));
-      // Black hole emblem: dark core, photon ring, lensed disk streak.
-      const bhUV = u.sub(vec2(0.64, 0.62)).mul(vec2(2.5, 1));
-      const d = bhUV.length();
-      const core = smoothstep(0.052, 0.045, d);
-      const ring = smoothstep(0.016, 0.002, d.sub(0.055).abs());
-      const diskBand = smoothstep(0.03, 0.0, bhUV.y.abs().sub(d.mul(0.10)));
-      const disk = diskBand.mul(smoothstep(0.2, 0.06, d)).mul(smoothstep(0.04, 0.07, d));
-      const halo = smoothstep(0.18, 0.05, d).mul(0.12);
+      const dir = positionLocal.normalize();
+
+      // Tangent frame around the hole, up-left of the flight path.
+      const bh = vec3(0.4, 0.33, -0.85).normalize();
+      const right = bh.cross(vec3(0, 1, 0)).normalize();
+      const up = right.cross(bh).normalize();
+      const q = vec2(dir.dot(right), dir.dot(up));
+      const r = q.length().max(1e-4);
+
+      // Gravitational lensing: star sampling bends toward the mass, so the
+      // field visibly smears into arcs as it nears the photon sphere.
+      const pull = float(0.0016).div(r.mul(r).add(0.0008)).min(1.2);
+      const warped = dir
+        .sub(right.mul(q.x.mul(pull)))
+        .sub(up.mul(q.y.mul(pull)))
+        .normalize();
+
+      // 3D grid stars: each cell the sphere crosses may hold one pinprick.
+      const starLayer = (density: number, seed: number, gate: number) => {
+        const g = warped.mul(density);
+        const cell = g.floor();
+        const id = cell.x
+          .add(density + 2)
+          .add(cell.y.add(density + 2).mul(257))
+          .add(cell.z.add(density + 2).mul(66049))
+          .add(seed);
+        const h1 = hash(id);
+        const h2 = hash(id.add(1013904));
+        const h3 = hash(id.add(2027808));
+        const h4 = hash(id.add(3041712));
+        const p = cell.add(
+          vec3(h1.mul(0.7).add(0.15), h2.mul(0.7).add(0.15), h3.mul(0.7).add(0.15)),
+        );
+        const dStar = g.sub(p).length();
+        const tw = this.uTime
+          .mul(h1.mul(1.6).add(0.4))
+          .add(h2.mul(6.28))
+          .sin()
+          .mul(0.3)
+          .add(0.7);
+        return smoothstep(0.3, 0.0, dStar).pow(3).mul(smoothstep(gate, 1, h4)).mul(tw);
+      };
+      const stars = vec3(starLayer(38, 11, 0.5).add(starLayer(88, 37, 0.45).mul(0.55)));
+
+      // Event-horizon shadow and the thin photon ring hugging it.
+      const core = smoothstep(0.035, 0.029, r);
+      const photon = smoothstep(0.004, 0.0008, r.sub(0.039).abs());
+
+      // Accretion disk: squashed ellipse, noise streaks, doppler beaming.
+      const e = vec2(q.x, q.y.mul(3.6));
+      const er = e.length().max(1e-4);
+      const angle = atan(e.y, e.x);
+      const band = smoothstep(0.032, 0.055, er).mul(smoothstep(0.21, 0.085, er));
+      const streak = mx_noise_float(
+        vec3(angle.mul(2), er.mul(30).sub(this.uTime.mul(0.7)), 4.2),
+      )
+        .mul(0.45)
+        .add(0.8);
+      const dop = float(1).sub(e.x.div(er).mul(0.75));
+      const heat = smoothstep(0.18, 0.045, er);
+      const diskCol = mix(this.uHigh, this.uPeak, heat);
+      // Lower half of the disk passes in front of the shadow; the upper
+      // half hides behind it — its light reappears as the arc on top.
+      const front = smoothstep(0.012, -0.012, q.y);
+      const occl = mix(float(1).sub(core), float(1), front);
+      const disk = band.mul(streak).mul(dop).mul(occl);
+      const arc = smoothstep(0.0045, 0.001, r.sub(0.044).abs())
+        .mul(smoothstep(-0.01, 0.025, q.y))
+        .mul(0.7);
+      const halo = smoothstep(0.17, 0.035, r).mul(0.12);
+      const boost = float(1).add(this.uBurst.mul(0.9));
+
+      // Faint band of palette light at the horizon ties dome to haze.
+      const horizon = smoothstep(0.3, 0.0, dir.y.abs()).mul(0.45);
+
       const out = stars
         .mul(float(1).sub(core))
-        .add(this.uPeak.mul(ring).mul(0.9))
-        .add(this.uHigh.mul(disk).mul(0.7))
-        .add(this.uHigh.mul(halo));
+        .add(diskCol.mul(disk).mul(0.85).mul(boost))
+        .add(this.uPeak.mul(photon.add(arc)).mul(0.9).mul(boost))
+        .add(this.uHigh.mul(halo))
+        .add(this.uLow.mul(horizon));
       return out.mul(this.uSkyFade).mul(this.uFade);
     })();
-    const sky = new THREE.Mesh(new THREE.PlaneGeometry(760, 320), skyMat);
-    sky.position.set(0, 30, -150);
+    const sky = new THREE.Mesh(new THREE.SphereGeometry(160, 48, 32), skyMat);
     sky.frustumCulled = false;
     this.sky = sky;
     ctx.scene.add(sky);
@@ -183,6 +250,9 @@ export class Terrain implements VisualScene {
     const wings = new THREE.Mesh(wingGeo, hullMat);
     wings.position.set(0, -0.1, 0.55);
     ship.add(wings);
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.55, 0.6), hullMat);
+    fin.position.set(0, 0.28, 0.75);
+    ship.add(fin);
 
     // Engine glow: additive sprite at the tail; bloom + afterimage do the trail.
     const engineMat = new THREE.SpriteNodeMaterial({
@@ -214,6 +284,7 @@ export class Terrain implements VisualScene {
   update(f: FrameFeatures, dt: number): void {
     this.uScroll.value += dt * this.scrollSpeed * 0.045;
     this.time += dt;
+    this.uTime.value = this.time;
     const ship = this.ship;
     if (!ship || !ship.visible) return;
 
@@ -236,6 +307,9 @@ export class Terrain implements VisualScene {
     } else {
       ship.rotation.z = -xVel * 0.35;
     }
+    // Nose follows the climb/dive — sells the flight far more than yaw alone.
+    const yVel = Math.cos(t * 0.9) * 0.405 + Math.cos(t * 2.3) * 0.276;
+    ship.rotation.x = -yVel * 0.3;
 
     // Engine answers the music: beats flare it, inhale throttles down.
     const pulse = f.onset ? 1 : 0;
