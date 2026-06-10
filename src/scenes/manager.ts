@@ -132,11 +132,18 @@ export class SceneManager {
   private retargetPalette(startSec: number, energy: number): void {
     const p = this.basePalette;
     if (!p) return;
-    const wobble = (Math.sin(startSec * 12.9898) * 43758.5453) % 1; // deterministic hash
-    const dh = (energy - 0.5) * 0.12 + wobble * 0.1 - 0.05;
+    const wobble = Math.abs((Math.sin(startSec * 12.9898) * 43758.5453) % 1);
+    // Real hue travel: up to ±90° per section, energy pushes warmer.
+    const dh = (energy - 0.5) * 0.2 + (wobble - 0.5) * 0.3;
+    // Every other-ish section, rotate which hue plays which role —
+    // primary/accent/secondary swap families instead of staying fixed.
+    const rotateRoles = wobble > 0.55;
+    const src: Record<string, string> = rotateRoles
+      ? { background: p.background, primary: p.accent, secondary: p.primary, accent: p.secondary }
+      : { background: p.background, primary: p.primary, secondary: p.secondary, accent: p.accent };
     const hsl = { h: 0, s: 0, l: 0 };
     for (const k of this.colNames) {
-      const col = this.targetCols[k].set(p[k]);
+      const col = this.targetCols[k].set(src[k]);
       col.getHSL(hsl);
       const shift = k === 'background' ? dh * 0.5 : dh;
       col.setHSL(

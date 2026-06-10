@@ -2,17 +2,49 @@ import { Vibrant } from 'node-vibrant/browser';
 import type { Emotion, Palette } from '../types/song-analysis';
 
 /**
- * Synthetic palette for tracks without cover art: valence picks the hue
- * (indigo → magenta → warm amber), arousal drives saturation.
+ * Synthetic palette for tracks without cover art. Emotions are complex —
+ * one hue is a caricature. The base hue comes from valence, but the
+ * SCHEME comes from character: high arousal earns triadic contrast,
+ * bright songs spread analogous, moody ones get a complementary accent.
+ * A key-derived rotation keeps two songs with the same mood apart.
  */
 export function emotionPalette(e: Emotion): Palette {
-  const hue = (250 + e.valence * 145) % 360;
-  const sat = 0.45 + e.arousal * 0.4;
-  const primary = hslHex(hue, sat, 0.62);
-  const accent = hslHex((hue + 25) % 360, Math.min(1, sat + 0.1), 0.75);
-  const secondary = hslHex((hue + 330) % 360, sat * 0.6, 0.5);
-  const background = hslHex(hue, sat * 0.5, 0.07);
-  return { background, primary, secondary, accent, swatches: [primary, accent, secondary], coverArtUrl: null };
+  // Base hue: valence path (indigo → magenta → amber), rotated by key
+  // (12 keys spread over ±55°) so same-mood songs still differ.
+  const keyIndex = 'C C♯ D E♭ E F F♯ G A♭ A B♭ B'.split(' ').indexOf(e.key);
+  const keyShift = (Math.max(0, keyIndex) / 11 - 0.5) * 110;
+  const hue = (250 + e.valence * 145 + keyShift + 360) % 360;
+  const sat = 0.5 + e.arousal * 0.4;
+
+  // Scheme by character.
+  let h2: number;
+  let h3: number;
+  if (e.arousal > 0.65) {
+    // Triadic: three genuinely different color families.
+    h2 = (hue + 120) % 360;
+    h3 = (hue + 240) % 360;
+  } else if (e.valence > 0.55) {
+    // Wide analogous: a warm flowing gradient.
+    h2 = (hue + 55) % 360;
+    h3 = (hue + 310) % 360;
+  } else {
+    // Complementary accent against a moody base.
+    h2 = (hue + 160) % 360;
+    h3 = (hue + 30) % 360;
+  }
+
+  const primary = hslHex(hue, sat, 0.6);
+  const accent = hslHex(h2, Math.min(1, sat + 0.12), 0.72);
+  const secondary = hslHex(h3, sat * 0.85, 0.55);
+  const background = hslHex((hue + 15) % 360, sat * 0.5, 0.07);
+  return {
+    background,
+    primary,
+    secondary,
+    accent,
+    swatches: [primary, accent, secondary],
+    coverArtUrl: null,
+  };
 }
 
 function hslHex(h: number, s: number, l: number): string {
