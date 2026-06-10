@@ -312,6 +312,17 @@ export class Boids implements VisualScene {
     }
   }
 
+  /** Wide, lively orbit — murmuration shapes need parallax to read. */
+  updateCamera(camera: THREE.PerspectiveCamera, t: number): void {
+    const a = t * 0.055;
+    camera.position.set(
+      Math.sin(a) * 24,
+      Math.sin(t * 0.037) * 7,
+      Math.cos(a) * 24,
+    );
+    camera.lookAt(0, 0, 0);
+  }
+
   setPalette(a: string, b: string): void {
     (this.uColorA.value as THREE.Color).set(a);
     (this.uColorB.value as THREE.Color).set(b);

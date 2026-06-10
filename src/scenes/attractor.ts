@@ -270,6 +270,16 @@ export class Attractor implements VisualScene {
     this.ctx.renderer.compute(this.updateCompute as Parameters<THREE.WebGPURenderer['compute']>[0]);
   }
 
+  /** Lissajous drift — strange attractors are sculptures; show depth. */
+  updateCamera(camera: THREE.PerspectiveCamera, t: number): void {
+    camera.position.set(
+      Math.sin(t * 0.047) * 20,
+      Math.sin(t * 0.079) * 9,
+      Math.cos(t * 0.047) * 20,
+    );
+    camera.lookAt(0, 0, 0);
+  }
+
   applyPalette(p: Palette): void {
     (this.uColorA.value as THREE.Color).set(p.primary);
     (this.uColorB.value as THREE.Color).set(p.accent);
