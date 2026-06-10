@@ -9,6 +9,31 @@ import type { SceneContext, VisualScene } from './scene';
 const FADE_CALM = 1.1;
 const FADE_DROP = 0.22;
 
+// ---- OKLab (Björn Ottosson) — perceptual lerp without muddy-gray midpoints.
+// THREE.Color stores linear-sRGB under color management: no transfer needed.
+function rgbToOklab(c: THREE.Color): [number, number, number] {
+  const l = Math.cbrt(0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b);
+  const m = Math.cbrt(0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b);
+  const sV = Math.cbrt(0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b);
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * sV,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * sV,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * sV,
+  ];
+}
+
+function oklabToRgb(L: number, a: number, b: number, out: THREE.Color): void {
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const sV = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  const cl = (x: number): number => Math.min(1, Math.max(0, x));
+  out.setRGB(
+    cl(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * sV),
+    cl(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * sV),
+    cl(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * sV),
+  );
+}
+
 /**
  * Owns all scenes (kept initialized; visibility-toggled), the active
  * conductor wiring, fade transitions, and section-driven auto-switching.
@@ -164,7 +189,10 @@ export class SceneManager {
     for (const name of this.colNames) {
       const c = this.currentCols[name];
       const t = this.targetCols[name];
-      c.lerp(t, k);
+      // Lerp in OKLab: hue paths stay vivid instead of sagging to gray.
+      const [cl, ca, cb] = rgbToOklab(c);
+      const [tl, ta, tb] = rgbToOklab(t);
+      oklabToRgb(cl + (tl - cl) * k, ca + (ta - ca) * k, cb + (tb - cb) * k, c);
       maxDelta = Math.max(
         maxDelta,
         Math.abs(c.r - t.r) + Math.abs(c.g - t.g) + Math.abs(c.b - t.b),
