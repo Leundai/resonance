@@ -7,6 +7,7 @@ import {
   hash,
   mix,
   mx_noise_float,
+  normalView,
   positionLocal,
   positionView,
   smoothstep,
@@ -234,27 +235,51 @@ export class Terrain implements VisualScene {
     this.sky = sky;
     ctx.scene.add(sky);
 
-    // ---- Ship: low-poly craft banking over the relief ----
+    // ---- Ship: faceted dart banking over the relief ----
+    // Hand-authored delta hull — nose at -z, swept wingtips, raised spine.
     const ship = new THREE.Group();
-    const hullMat = new THREE.MeshBasicNodeMaterial();
-    hullMat.colorNode = Fn(() => {
-      // Cheap top-light gradient on the local Y; peak rim near the nose.
-      const shade = positionLocal.y.mul(0.35).add(0.75);
-      return vec3(this.uShipHull.r, this.uShipHull.g, this.uShipHull.b).mul(shade);
-    })();
-    const body = new THREE.Mesh(new THREE.ConeGeometry(0.55, 2.1, 4), hullMat);
-    body.rotation.x = -Math.PI / 2; // nose toward -z
-    body.rotation.z = Math.PI / 4;
-    ship.add(body);
-    const wingGeo = new THREE.BoxGeometry(2.6, 0.06, 0.7);
-    const wings = new THREE.Mesh(wingGeo, hullMat);
-    wings.position.set(0, -0.1, 0.55);
-    ship.add(wings);
-    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.55, 0.6), hullMat);
-    fin.position.set(0, 0.28, 0.75);
-    ship.add(fin);
+    const N = [0, 0, -2.4];
+    const T = [0, 0.35, 0.55]; // spine rear
+    const B = [0, -0.28, 0.55]; // belly rear
+    const L = [-2.0, 0, 1.3]; // wingtips
+    const R = [2.0, 0, 1.3];
+    // prettier-ignore
+    const hullVerts = new Float32Array([
+      ...N, ...L, ...T, // upper left
+      ...N, ...T, ...R, // upper right
+      ...N, ...B, ...L, // lower left
+      ...N, ...R, ...B, // lower right
+      ...L, ...B, ...T, // back left
+      ...R, ...T, ...B, // back right
+    ]);
+    const hullGeo = new THREE.BufferGeometry();
+    hullGeo.setAttribute('position', new THREE.BufferAttribute(hullVerts, 3));
+    hullGeo.computeVertexNormals(); // non-indexed soup → true flat facets
 
-    // Engine glow: additive sprite at the tail; bloom + afterimage do the trail.
+    const hullMat = new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide });
+    hullMat.colorNode = Fn(() => {
+      // Faceted shading in view space so banks and rolls catch the light.
+      const diff = normalView.normalize().dot(vec3(0.35, 0.55, 0.85).normalize());
+      const shade = diff.mul(0.45).add(0.62);
+      // Peak-colored leading edge running up to the nose.
+      const noseGlow = smoothstep(0.2, -2.2, positionLocal.z).mul(0.4);
+      return this.uShipHull.mul(shade).add(this.uPeak.mul(noseGlow));
+    })();
+    ship.add(new THREE.Mesh(hullGeo, hullMat));
+
+    // Blade tail fin.
+    // prettier-ignore
+    const finVerts = new Float32Array([
+      0, 0.3, 0.35,
+      0, 0.95, 1.15,
+      0, 0.3, 1.25,
+    ]);
+    const finGeo = new THREE.BufferGeometry();
+    finGeo.setAttribute('position', new THREE.BufferAttribute(finVerts, 3));
+    finGeo.computeVertexNormals();
+    ship.add(new THREE.Mesh(finGeo, hullMat));
+
+    // Twin engine glows at the wing roots; bloom + afterimage do the trail.
     const engineMat = new THREE.SpriteNodeMaterial({
       blending: THREE.AdditiveBlending,
       depthWrite: false,
@@ -266,9 +291,11 @@ export class Terrain implements VisualScene {
       return vec3(this.uPeak.r, this.uPeak.g, this.uPeak.b).mul(g).mul(this.uEngine);
     })();
     engineMat.opacityNode = Fn(() => smoothstep(0.5, 0.1, uv().distance(0.5)).mul(this.uFade))();
-    const engine = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), engineMat);
-    engine.position.set(0, -0.05, 1.3);
-    ship.add(engine);
+    for (const ex of [-0.5, 0.5]) {
+      const engine = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), engineMat);
+      engine.position.set(ex, 0.02, 1.1);
+      ship.add(engine);
+    }
 
     ship.position.set(0, 2.4, 12);
     this.ship = ship;
@@ -292,7 +319,7 @@ export class Terrain implements VisualScene {
     const t = this.time;
     const x = Math.sin(t * 0.42) * 4.2;
     const xVel = Math.cos(t * 0.42) * 0.42 * 4.2;
-    const y = 2.6 + Math.sin(t * 0.9) * 0.45 + Math.sin(t * 2.3) * 0.12;
+    const y = 3.2 + Math.sin(t * 0.9) * 0.55 + Math.sin(t * 2.3) * 0.12;
     ship.position.set(x, y, 12 + Math.sin(t * 0.31) * 1.5);
     ship.rotation.y = -xVel * 0.12;
 

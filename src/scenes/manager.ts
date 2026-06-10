@@ -77,7 +77,9 @@ export class SceneManager {
   applyDirectorPlan(plan: DirectorPlan): void {
     this.directorPlan = plan;
     this.conductor?.setConfig(this.configFor(this.active.name));
-    // Jump to the plan's opening scene if it differs.
+    // Jump to the plan's opening scene if it differs — unless the user
+    // manually locked a scene while the plan was in flight; they win.
+    if (!this.autoRotate) return;
     const opening = plan.scenePlan[0];
     if (opening && opening.scene !== this.active.name) {
       this.switchTo(this.scenes.findIndex((s) => s.name === opening.scene));
