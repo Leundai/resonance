@@ -1,5 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { analyzeInWorker, cacheAnalysis, getCachedAnalysis, sha256Hex } from './analysis';
+import { Conductor } from './conductor/conductor';
+import { DEFAULT_CONFIGS } from './conductor/configs';
 import { FilePlayer } from './audio/file-player';
 import type { FrameFeatures } from './audio/features';
 import { ParticleField } from './scenes/particles';
@@ -67,6 +69,7 @@ async function boot(): Promise<void> {
   const ctx: SceneContext = { renderer, scene, camera };
   const particles = new ParticleField();
   await particles.init(ctx);
+  const conductor = new Conductor(particles, DEFAULT_CONFIGS.particles);
 
   let player: FilePlayer | null = null;
 
@@ -149,6 +152,7 @@ async function boot(): Promise<void> {
     elapsed += dt;
     const features =
       player && player.isPlaying ? player.frame() : idleFeatures(elapsed);
+    conductor.update(features, dt);
     particles.update(features, dt);
     debugState.features = features;
     if (features.onset) debugState.onsetCount++;

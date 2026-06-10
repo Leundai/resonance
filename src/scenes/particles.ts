@@ -15,29 +15,58 @@ import {
   vec3,
 } from 'three/tsl';
 import type { FrameFeatures } from '../audio/features';
-import type { SceneContext, VisualScene } from './scene';
+import type { ParamSpec, SceneContext, VisualScene } from './scene';
 
 const COUNT = 100_000;
 
 /**
- * Curl-ish noise flow-field particles on GPU compute. Bass drives pulse
- * scale, treble drives turbulence, level drives brightness.
+ * Curl-ish noise flow-field particles on GPU compute. All reactivity
+ * arrives through conductor-driven params.
  */
 export class ParticleField implements VisualScene {
   readonly name = 'particles';
 
+  readonly params: Record<string, ParamSpec> = {
+    turbulence: { default: 0.8, min: 0, max: 5 },
+    breathe: { default: 0, min: 0, max: 1 },
+    brightness: { default: 0.5, min: 0, max: 2.5 },
+    pulse: { default: 0, min: 0, max: 1 },
+    drift: { default: 0.5, min: 0, max: 2 },
+  };
+
   private uTime = uniform(0);
   private uDelta = uniform(0.016);
-  private uBass = uniform(0);
-  private uTreble = uniform(0);
-  private uLevel = uniform(0);
-  private uPulse = uniform(0);
+  private uTurbulence = uniform(this.params.turbulence.default);
+  private uBreathe = uniform(this.params.breathe.default);
+  private uBrightness = uniform(this.params.brightness.default);
+  private uPulse = uniform(this.params.pulse.default);
+  private uDrift = uniform(this.params.drift.default);
   private uColorA = uniform(color('#4a7cff'));
   private uColorB = uniform(color('#ff5ec4'));
 
   private mesh: THREE.InstancedMesh | null = null;
   private updateCompute: unknown = null;
   private ctx: SceneContext | null = null;
+
+  setParam(name: string, value: number): void {
+    switch (name) {
+      case 'turbulence':
+        this.uTurbulence.value = value;
+        break;
+      case 'breathe':
+        this.uBreathe.value = value;
+        break;
+      case 'brightness':
+        this.uBrightness.value = value;
+        break;
+      case 'pulse':
+        this.uPulse.value = value;
+        break;
+      case 'drift':
+        this.uDrift.value = value;
+        break;
+    }
+  }
 
   async init(ctx: SceneContext): Promise<void> {
     this.ctx = ctx;
@@ -71,21 +100,22 @@ export class ParticleField implements VisualScene {
       const vel = velocities.element(instanceIndex);
       const seed = seeds.element(instanceIndex);
 
-      const turbulence = float(0.6).add(this.uTreble.mul(3.5));
       const noiseScale = float(0.12);
       const flow = mx_noise_vec3(
-        pos.mul(noiseScale).add(vec3(0, this.uTime.mul(0.05), this.uTime.mul(0.02))),
+        pos
+          .mul(noiseScale)
+          .add(vec3(0, this.uTime.mul(this.uDrift.mul(0.1)), this.uTime.mul(0.02))),
       );
 
-      vel.addAssign(flow.mul(turbulence).mul(this.uDelta));
-      // Spring toward a per-particle shell radius; bass breathes it outward.
+      vel.addAssign(flow.mul(this.uTurbulence).mul(this.uDelta));
+      // Spring toward a per-particle shell radius; breathe expands it.
       const len = pos.length().max(0.001);
       const dir = pos.div(len);
-      const targetR = seed.mul(5).add(5).mul(float(1).add(this.uBass.mul(0.8)));
+      const targetR = seed.mul(5).add(5).mul(float(1).add(this.uBreathe.mul(0.8)));
       vel.addAssign(dir.mul(targetR.sub(len)).mul(0.6).mul(this.uDelta));
       vel.mulAssign(float(0.985));
 
-      pos.addAssign(vel.mul(this.uDelta).mul(float(1).add(this.uBass.mul(2.5))));
+      pos.addAssign(vel.mul(this.uDelta).mul(float(1).add(this.uBreathe.mul(2.5))));
 
       // Recycle far-flung particles back into the shell.
       If(pos.length().greaterThan(30), () => {
@@ -105,14 +135,16 @@ export class ParticleField implements VisualScene {
     const seedAttr = seeds.toAttribute();
     const speed = velocities.toAttribute().length();
     const mixT = smoothstep(0.0, 1.5, speed).add(seedAttr.mul(0.25)).clamp(0, 1);
-    const brightness = float(0.35).add(this.uLevel.mul(1.4)).add(this.uPulse.mul(0.7));
+    const brightness = this.uBrightness.add(this.uPulse.mul(0.7));
     material.colorNode = mix(this.uColorA, this.uColorB, mixT).mul(brightness);
 
     const d = uv().distance(0.5);
-    material.opacityNode = smoothstep(0.5, 0.05, d).mul(float(0.25).add(this.uLevel.mul(0.6)));
+    material.opacityNode = smoothstep(0.5, 0.05, d).mul(
+      float(0.25).add(this.uBrightness.mul(0.35)),
+    );
     material.scaleNode = float(0.08)
       .add(seedAttr.mul(0.06))
-      .mul(float(1).add(this.uBass.mul(1.2)).add(this.uPulse.mul(0.4)));
+      .mul(float(1).add(this.uBreathe.mul(1.2)).add(this.uPulse.mul(0.4)));
 
     const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), material, COUNT);
     mesh.frustumCulled = false;
@@ -122,16 +154,10 @@ export class ParticleField implements VisualScene {
     await ctx.renderer.computeAsync(initCompute);
   }
 
-  update(f: FrameFeatures, dt: number): void {
+  update(_f: FrameFeatures, dt: number): void {
     if (!this.ctx) return;
     this.uTime.value += dt;
     this.uDelta.value = Math.min(dt, 1 / 30);
-    this.uBass.value = f.bass;
-    this.uTreble.value = f.treble;
-    this.uLevel.value = f.level;
-    // Beat-grid pulse: instant attack, exponential release.
-    if (f.onset) this.uPulse.value = 1;
-    else this.uPulse.value *= Math.exp(-dt * 5);
     this.ctx.renderer.compute(this.updateCompute as Parameters<THREE.WebGPURenderer['compute']>[0]);
   }
 
