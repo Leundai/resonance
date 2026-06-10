@@ -3,6 +3,12 @@ import {
   Fn,
   If,
   Loop,
+  atan,
+  min as tslMin,
+  atomicAdd,
+  atomicLoad,
+  atomicStore,
+  cameraViewMatrix,
   color,
   float,
   hash,
@@ -10,20 +16,32 @@ import {
   instancedArray,
   mix,
   smoothstep,
+  uint,
   uniform,
   uv,
+  vec2,
   vec3,
+  vec4,
 } from 'three/tsl';
 import type { FrameFeatures } from '../audio/features';
 import type { Palette } from '../types/song-analysis';
 import type { ParamSpec, SceneContext, VisualScene } from './scene';
 
-// Brute-force O(n²) neighbor pass on GPU — fine at 4k agents; the
-// spatial-grid upgrade lifts this to 100k+ later.
-const COUNT = 4096;
+const COUNT = 32_768;
 const BOUNDS = 14;
+// Uniform grid sized to the perception radius: one cell ≈ one neighborhood.
+const PERCEPTION = 2.2;
+const SEP_RADIUS = 0.9;
+const GRID_MIN = -18;
+const GRID_SIZE = 36;
+const DIM = Math.ceil(GRID_SIZE / PERCEPTION); // 17
+const CELLS = DIM * DIM * DIM;
 
-/** GPU murmuration. Musical tension lives in the cohesion/scatter axis. */
+/**
+ * GPU murmuration at 65k agents via counting-sort spatial grid
+ * (clear → count → scan → scatter → simulate, all TSL compute).
+ * Musical tension lives in the cohesion/scatter axis.
+ */
 export class Boids implements VisualScene {
   readonly name = 'boids';
 
@@ -53,7 +71,7 @@ export class Boids implements VisualScene {
   private uColorB = uniform(color('#ffd166'));
 
   private mesh: THREE.InstancedMesh | null = null;
-  private updateCompute: unknown = null;
+  private passes: unknown[] = [];
   private ctx: SceneContext | null = null;
 
   setParam(name: string, value: number): void {
@@ -76,23 +94,69 @@ export class Boids implements VisualScene {
 
     const positions = instancedArray(COUNT, 'vec3');
     const velocities = instancedArray(COUNT, 'vec3');
+    const sorted = instancedArray(COUNT, 'uint');
+    const counts = instancedArray(CELLS, 'uint').toAtomic();
+    const fills = instancedArray(CELLS, 'uint').toAtomic();
+    const countsPlain = instancedArray(CELLS, 'uint');
+    const starts = instancedArray(CELLS, 'uint');
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cellOf = (p: any) => {
+      const gx = p.x.sub(GRID_MIN).div(PERCEPTION).floor().clamp(0, DIM - 1);
+      const gy = p.y.sub(GRID_MIN).div(PERCEPTION).floor().clamp(0, DIM - 1);
+      const gz = p.z.sub(GRID_MIN).div(PERCEPTION).floor().clamp(0, DIM - 1);
+      return gx.add(gy.mul(DIM)).add(gz.mul(DIM * DIM)).toUint();
+    };
 
     const initCompute = Fn(() => {
       const s1 = hash(instanceIndex);
       const s2 = hash(instanceIndex.add(1337));
       const s3 = hash(instanceIndex.add(7331));
-      positions.element(instanceIndex).assign(
-        vec3(s1.sub(0.5), s2.sub(0.5), s3.sub(0.5)).mul(BOUNDS),
-      );
-      velocities.element(instanceIndex).assign(
-        vec3(hash(instanceIndex.add(11)).sub(0.5), hash(instanceIndex.add(22)).sub(0.5), hash(instanceIndex.add(33)).sub(0.5)).mul(2),
-      );
+      positions
+        .element(instanceIndex)
+        .assign(vec3(s1.sub(0.5), s2.sub(0.5), s3.sub(0.5)).mul(BOUNDS));
+      velocities
+        .element(instanceIndex)
+        .assign(
+          vec3(
+            hash(instanceIndex.add(11)).sub(0.5),
+            hash(instanceIndex.add(22)).sub(0.5),
+            hash(instanceIndex.add(33)).sub(0.5),
+          ).mul(2),
+        );
     })().compute(COUNT);
 
-    const PERCEPTION = float(2.2);
-    const SEP_RADIUS = float(0.9);
+    const clearPass = Fn(() => {
+      atomicStore(counts.element(instanceIndex), uint(0));
+      atomicStore(fills.element(instanceIndex), uint(0));
+    })().compute(CELLS);
 
-    const update = Fn(() => {
+    const countPass = Fn(() => {
+      const cell = cellOf(positions.element(instanceIndex));
+      atomicAdd(counts.element(cell), uint(1));
+    })().compute(COUNT);
+
+    const copyPass = Fn(() => {
+      const loaded = atomicLoad(counts.element(instanceIndex)) as unknown as ReturnType<typeof uint>;
+      countsPlain.element(instanceIndex).assign(loaded);
+    })().compute(CELLS);
+
+    // Naive O(cells²) exclusive scan — 17³ cells makes this trivial.
+    const scanPass = Fn(() => {
+      const total = uint(0).toVar();
+      Loop({ start: uint(0), end: instanceIndex.toUint(), type: 'uint' }, ({ i }) => {
+        total.addAssign(countsPlain.element(i));
+      });
+      starts.element(instanceIndex).assign(total);
+    })().compute(CELLS);
+
+    const scatterPass = Fn(() => {
+      const cell = cellOf(positions.element(instanceIndex));
+      const slot = atomicAdd(fills.element(cell), uint(1)) as unknown as ReturnType<typeof uint>;
+      sorted.element(starts.element(cell).add(slot)).assign(instanceIndex);
+    })().compute(COUNT);
+
+    const simPass = Fn(() => {
       const pos = positions.element(instanceIndex);
       const vel = velocities.element(instanceIndex);
 
@@ -101,21 +165,44 @@ export class Boids implements VisualScene {
       const sepSum = vec3(0).toVar();
       const count = float(0).toVar();
 
-      Loop({ start: 0, end: COUNT, type: 'uint' }, ({ i }) => {
-        If(i.notEqual(instanceIndex), () => {
-          const otherPos = positions.element(i);
-          const diff = pos.sub(otherPos);
-          const d = diff.length();
-          If(d.lessThan(PERCEPTION), () => {
-            cohSum.addAssign(otherPos);
-            aliSum.addAssign(velocities.element(i));
-            count.addAssign(1);
-            If(d.lessThan(SEP_RADIUS), () => {
-              sepSum.addAssign(diff.div(d.mul(d).max(0.01)));
+      const gx = pos.x.sub(GRID_MIN).div(PERCEPTION).floor();
+      const gy = pos.y.sub(GRID_MIN).div(PERCEPTION).floor();
+      const gz = pos.z.sub(GRID_MIN).div(PERCEPTION).floor();
+
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const cx = gx.add(float(dx)).clamp(0, DIM - 1);
+            const cy = gy.add(float(dy)).clamp(0, DIM - 1);
+            const cz = gz.add(float(dz)).clamp(0, DIM - 1);
+            const cell = cx.add(cy.mul(DIM)).add(cz.mul(DIM * DIM)).toUint();
+            const start = starts.element(cell);
+            // Cap per-cell samples: dense clusters would otherwise go
+            // quadratic exactly when cohesion makes the flock clump.
+            // tslMin's .d.ts is float-only; WGSL min(u32,u32) is valid.
+            const n = (tslMin as unknown as (a: unknown, b: unknown) => ReturnType<typeof uint>)(
+              countsPlain.element(cell),
+              uint(14),
+            );
+            Loop({ start: uint(0), end: n, type: 'uint' }, ({ i }) => {
+              const other = sorted.element(start.add(i));
+              If(other.notEqual(instanceIndex), () => {
+                const otherPos = positions.element(other);
+                const diff = pos.sub(otherPos);
+                const d = diff.length();
+                If(d.lessThan(PERCEPTION), () => {
+                  cohSum.addAssign(otherPos);
+                  aliSum.addAssign(velocities.element(other));
+                  count.addAssign(1);
+                  If(d.lessThan(SEP_RADIUS), () => {
+                    sepSum.addAssign(diff.div(d.mul(d).max(0.01)));
+                  });
+                });
+              });
             });
-          });
-        });
-      });
+          }
+        }
+      }
 
       If(count.greaterThan(0), () => {
         const cohesionForce = cohSum.div(count).sub(pos).normalize();
@@ -148,7 +235,8 @@ export class Boids implements VisualScene {
 
       pos.addAssign(vel.mul(this.uDelta));
     })().compute(COUNT);
-    this.updateCompute = update;
+
+    this.passes = [clearPass, countPass, copyPass, scanPass, scatterPass, simPass];
 
     const material = new THREE.SpriteNodeMaterial({
       blending: THREE.AdditiveBlending,
@@ -157,12 +245,18 @@ export class Boids implements VisualScene {
     });
     material.positionNode = positions.toAttribute();
 
-    const speedT = smoothstep(1, 7, velocities.toAttribute().length());
-    material.colorNode = mix(this.uColorA, this.uColorB, speedT)
-      .mul(this.uBrightness.mul(this.uFade));
+    // Stretch each sprite along its screen-space velocity direction.
+    const velAttr = velocities.toAttribute();
+    const viewVel = cameraViewMatrix.mul(vec4(velAttr.x, velAttr.y, velAttr.z, 0)).xyz;
+    material.rotationNode = atan(viewVel.y, viewVel.x);
+    const speedT = smoothstep(1, 8, velAttr.length());
+    material.scaleNode = vec2(float(0.18).add(speedT.mul(0.3)), float(0.05));
+
+    material.colorNode = mix(this.uColorA, this.uColorB, speedT).mul(
+      this.uBrightness.mul(this.uFade),
+    );
     const d = uv().distance(0.5);
-    material.opacityNode = smoothstep(0.5, 0.1, d).mul(this.uFade);
-    material.scaleNode = float(0.16).add(speedT.mul(0.1));
+    material.opacityNode = smoothstep(0.5, 0.1, d).mul(this.uFade).mul(0.55);
 
     const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), material, COUNT);
     mesh.frustumCulled = false;
@@ -179,7 +273,9 @@ export class Boids implements VisualScene {
   update(_f: FrameFeatures, dt: number): void {
     if (!this.ctx || !this.mesh?.visible) return;
     this.uDelta.value = Math.min(dt, 1 / 30);
-    this.ctx.renderer.compute(this.updateCompute as Parameters<THREE.WebGPURenderer['compute']>[0]);
+    for (const pass of this.passes) {
+      this.ctx.renderer.compute(pass as Parameters<THREE.WebGPURenderer['compute']>[0]);
+    }
   }
 
   setPalette(a: string, b: string): void {
