@@ -130,6 +130,7 @@ async function boot(): Promise<void> {
       debugState.directorMood = plan.mood;
       const tok = plan.usage ? ` · ${plan.usage.input}→${plan.usage.output} tok` : '';
       panel.setDirectorStatus(`✓ ${plan.mood}${tok}`);
+      panel.setDirectorPlan(plan);
     } catch (err) {
       if (token === directorToken) {
         panel.setDirectorStatus(`error: ${err instanceof Error ? err.message.slice(0, 60) : err}`);
@@ -309,7 +310,7 @@ async function boot(): Promise<void> {
       void player.toggle();
     }
     const digit = Number(e.key);
-    if (digit >= 1 && digit <= 7) manager.switchTo(digit - 1);
+    if (digit >= 1 && digit <= 7) manager.switchTo(digit - 1, { manual: true });
   });
 
   let last = performance.now();

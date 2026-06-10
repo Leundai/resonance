@@ -11,7 +11,9 @@ import type { ParamSpec } from '../scenes/scene';
 
 export interface DirectorPlan {
   mood: string;
-  scenePlan: { startSec: number; scene: string }[];
+  /** Why this overall read — shown in the panel. */
+  rationale: string;
+  scenePlan: { startSec: number; scene: string; why?: string }[];
   configs: Record<string, ConductorConfig>;
   /** Tokens spent on this call (from the API response). */
   usage?: { input: number; output: number };
@@ -79,7 +81,7 @@ Pick scenes that fit each section's feel (terrain/physarum = calm, particles/att
 Keep 'out' ranges inside each param's [min,max]. Always include inhale→inhale and drop→burst mappings where those params exist.
 
 Respond with ONLY this JSON, no prose:
-{"mood":"<3-6 words>","scenePlan":[{"startSec":0,"scene":"<name>"},...one per section...],"configs":{"<scene>":{"pulseDecay":5,"mappings":[...]} for every scene you use}}`;
+{"mood":"<3-6 words>","rationale":"<2 short sentences: your overall read and strategy>","scenePlan":[{"startSec":0,"scene":"<name>","why":"<5-8 words>"},...one per section...],"configs":{"<scene>":{"pulseDecay":5,"mappings":[...]} for every scene you use}}`;
 }
 
 interface DirectorOptions {
@@ -140,6 +142,7 @@ function validatePlan(
         typeof e.startSec === 'number' &&
         e.startSec < analysis.durationSec,
     )
+    .map((e) => ({ ...e, why: typeof e.why === 'string' ? e.why.slice(0, 60) : undefined }))
     .sort((a, b) => a.startSec - b.startSec);
   if (scenePlan.length === 0) throw new Error('director: empty scene plan');
 
@@ -170,7 +173,12 @@ function validatePlan(
   if (Object.keys(configs).length === 0) throw new Error('director: no valid configs');
 
   // Every planned scene needs a config; missing ones fall back later.
-  return { mood: String(raw.mood ?? '').slice(0, 80), scenePlan, configs };
+  return {
+    mood: String(raw.mood ?? '').slice(0, 80),
+    rationale: String(raw.rationale ?? '').slice(0, 300),
+    scenePlan,
+    configs,
+  };
 }
 
 function clampNum(v: unknown, lo: number, hi: number, dflt: number): number {

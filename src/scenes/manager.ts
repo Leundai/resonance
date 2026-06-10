@@ -22,6 +22,10 @@ export class SceneManager {
   private lastSwitchEnergy = -1;
   private directorPlan: DirectorPlan | null = null;
   private arousal = 0.5;
+  /** When false (set by a manual scene switch), section boundaries stop
+   *  changing scenes — the conductor keeps directing within the scene. */
+  autoRotate = true;
+  onAutoRotateChanged: ((on: boolean) => void) | null = null;
 
   async init(ctx: SceneContext, scenes: VisualScene[]): Promise<void> {
     this.scenes = scenes;
@@ -91,9 +95,17 @@ export class SceneManager {
     for (const s of this.scenes) s.applyPalette?.(palette);
   }
 
-  switchTo(index: number): void {
+  switchTo(index: number, opts?: { manual?: boolean }): void {
+    if (opts?.manual && this.autoRotate) {
+      this.autoRotate = false;
+      this.onAutoRotateChanged?.(false);
+    }
     if (index === this.activeIndex || index < 0 || index >= this.scenes.length) return;
     this.pendingIndex = index;
+  }
+
+  setAutoRotate(on: boolean): void {
+    this.autoRotate = on;
   }
 
   /**
@@ -102,6 +114,8 @@ export class SceneManager {
    * boids for high-energy sections.
    */
   private onSection(startSec: number, energy: number): void {
+    // Manual scene choice wins until the user hands control back.
+    if (!this.autoRotate) return;
     // Director plan takes precedence over the energy-band heuristic.
     if (this.directorPlan) {
       const entry = this.directorPlan.scenePlan.find((e) => Math.abs(e.startSec - startSec) < 2);

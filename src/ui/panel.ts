@@ -13,7 +13,7 @@ export class DevPanel {
   private pane: Pane;
   private monitor = { fps: 0, pulse: 0, inhale: 0, drop: 0 };
   private info = { track: '—', bpm: 0, sections: 0, key: '—', feel: '—' };
-  private settings = { conductor: true, scene: 0 };
+  private settings = { conductor: true, scene: 0, autoScenes: true };
   private sceneFolder: FolderApi | null = null;
 
   /** LLM director settings — key persists in localStorage. */
@@ -22,6 +22,7 @@ export class DevPanel {
     enabled: localStorage.getItem('resonance.directorEnabled') === 'true',
     model: localStorage.getItem('resonance.directorModel') ?? 'claude-haiku-4-5-20251001',
     status: 'idle',
+    rationale: '—',
   };
 
   constructor(manager: SceneManager) {
@@ -56,10 +57,20 @@ export class DevPanel {
       .addBinding(this.settings, 'scene', {
         options: Object.fromEntries(manager.sceneNames.map((n, i) => [n, i])),
       })
-      .on('change', (e) => manager.switchTo(e.value));
+      .on('change', (e) => manager.switchTo(e.value, { manual: true }));
     this.pane
       .addBinding(this.settings, 'conductor', { label: 'conductor drives' })
-      .on('change', (e) => manager.setConductorEnabled(e.value));
+      .on('change', (e) => {
+        manager.setConductorEnabled(e.value);
+        this.setSlidersDisabled(e.value);
+      });
+    this.pane
+      .addBinding(this.settings, 'autoScenes', { label: 'auto scene changes' })
+      .on('change', (e) => manager.setAutoRotate(e.value));
+    manager.onAutoRotateChanged = (on) => {
+      this.settings.autoScenes = on;
+      this.pane.refresh();
+    };
 
     const director = this.pane.addFolder({ title: 'director (LLM)', expanded: false });
     director
@@ -77,6 +88,11 @@ export class DevPanel {
       })
       .on('change', (e) => localStorage.setItem('resonance.directorModel', e.value));
     director.addBinding(this.director, 'status', { readonly: true });
+    director.addBinding(this.director, 'rationale', {
+      readonly: true,
+      multiline: true,
+      rows: 4,
+    });
 
     this.rebindScene(manager.active);
     manager.onSceneChanged = (scene) => {
@@ -90,9 +106,14 @@ export class DevPanel {
     });
   }
 
-  private sceneBindings: { obj: Record<string, number>; name: string }[] = [];
+  private sceneBindings: { obj: Record<string, number>; name: string; api: { disabled: boolean } }[] = [];
   private boundScene: VisualScene | null = null;
-  private userDragging = false;
+
+  /** Conductor-driven sliders are visible and moving but not editable —
+   *  editing them while the conductor overwrites every frame is a lie. */
+  private setSlidersDisabled(disabled: boolean): void {
+    for (const b of this.sceneBindings) b.api.disabled = disabled;
+  }
 
   private rebindScene(scene: VisualScene): void {
     this.sceneFolder?.dispose();
@@ -101,18 +122,15 @@ export class DevPanel {
     this.boundScene = scene;
     for (const [name, spec] of Object.entries(scene.params)) {
       const obj = { [name]: scene.getParam(name) };
-      this.sceneBindings.push({ obj, name });
-      this.sceneFolder
+      const api = this.sceneFolder
         .addBinding(obj, name, { min: spec.min, max: spec.max })
         .on('change', (e) => {
-          // Only forward genuine user edits, not read-back refreshes.
-          if (this.userDragging || !this.settings.conductor) {
-            scene.setParam(name, e.value as number);
-          }
+          // Read-back refreshes don't fire change events; this is a user edit.
+          if (!this.settings.conductor) scene.setParam(name, e.value as number);
         });
+      this.sceneBindings.push({ obj, name, api: api as unknown as { disabled: boolean } });
     }
-    this.sceneFolder.element.addEventListener('pointerdown', () => (this.userDragging = true));
-    window.addEventListener('pointerup', () => (this.userDragging = false));
+    this.setSlidersDisabled(this.settings.conductor);
   }
 
   setAnalysis(track: string, analysis: SongAnalysis): void {
@@ -131,6 +149,23 @@ export class DevPanel {
     this.pane.refresh();
   }
 
+  /** Surface the director's reasoning: rationale in the panel, the full
+   *  scene-by-scene plan (with 'why' notes) in the console. */
+  setDirectorPlan(plan: {
+    mood: string;
+    rationale: string;
+    scenePlan: { startSec: number; scene: string; why?: string }[];
+  }): void {
+    this.director.rationale = plan.rationale || plan.mood;
+    console.info(
+      `[director] ${plan.mood} — ${plan.rationale}\n` +
+        plan.scenePlan
+          .map((e) => `  ${e.startSec.toFixed(0).padStart(4)}s → ${e.scene}${e.why ? ` (${e.why})` : ''}`)
+          .join('\n'),
+    );
+    this.pane.refresh();
+  }
+
   private readbackAccum = 0;
 
   update(fps: number, signals: { pulse: number; inhale: number; drop: number }, dt = 0.016): void {
@@ -143,7 +178,7 @@ export class DevPanel {
     // Read conductor-driven values back into the sliders (~12 Hz) so the
     // panel dances with the music instead of sitting frozen.
     this.readbackAccum += dt;
-    if (this.readbackAccum > 0.08 && this.settings.conductor && !this.userDragging) {
+    if (this.readbackAccum > 0.08 && this.settings.conductor) {
       this.readbackAccum = 0;
       const scene = this.boundScene;
       if (scene) {
