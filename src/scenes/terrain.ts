@@ -107,6 +107,12 @@ export class Terrain implements VisualScene {
     const slope = smoothstep(0.1, 1.05, hN);
     let c = mix(this.uLow, this.uHigh, slope);
     c = mix(c, this.uPeak, smoothstep(0.8, 1.05, hN).mul(this.uGlow.add(this.uBurst.mul(1.2))));
+    // Topographic contour lines — the heightfield's native articulation.
+    // Glow rides the beat; drops flood the map with lines.
+    const contour = smoothstep(0.08, 0.02, hN.mul(7).fract().sub(0.5).abs());
+    c = c.add(
+      this.uPeak.mul(contour).mul(slope.mul(0.6).add(0.15)).mul(this.uGlow.mul(0.35).add(this.uBurst.mul(0.5))),
+    );
     // Distance haze toward background.
     const depth = positionView.z.negate();
     const haze = smoothstep(14, 55, depth);
