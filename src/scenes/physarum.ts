@@ -21,8 +21,8 @@ import type { FrameFeatures } from '../audio/features';
 import type { Palette } from '../types/song-analysis';
 import type { ParamSpec, SceneContext, VisualScene } from './scene';
 
-const AGENTS = 120_000;
-const RES = 512;
+const AGENTS = 200_000;
+const RES = 768;
 
 /**
  * Jeff Jones physarum (2010): agents sense a trail field, steer toward

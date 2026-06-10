@@ -18,7 +18,7 @@ import type { FrameFeatures } from '../audio/features';
 import type { Palette } from '../types/song-analysis';
 import type { ParamSpec, SceneContext, VisualScene } from './scene';
 
-const COUNT = 100_000;
+const COUNT = 160_000;
 
 /**
  * Curl-ish noise flow-field particles on GPU compute. All reactivity

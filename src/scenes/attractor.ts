@@ -17,7 +17,7 @@ import type { FrameFeatures } from '../audio/features';
 import type { Palette } from '../types/song-analysis';
 import type { ParamSpec, SceneContext, VisualScene } from './scene';
 
-const COUNT = 150_000;
+const COUNT = 260_000;
 const ATTRACTORS = 4; // lorenz, thomas, aizawa, halvorsen
 const MORPH_SEC = 2.5;
 

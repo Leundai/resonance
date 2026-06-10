@@ -23,9 +23,9 @@ import type { FrameFeatures } from '../audio/features';
 import type { Palette } from '../types/song-analysis';
 import type { ParamSpec, SceneContext, VisualScene } from './scene';
 
-const RT_W = 960;
-const RT_H = 540;
-const STEPS = 110;
+const RT_W = 1920;
+const RT_H = 1080;
+const STEPS = 130;
 const HORIZON = 1.0;
 const DISK_IN = 2.3;
 const DISK_OUT = 9.5;

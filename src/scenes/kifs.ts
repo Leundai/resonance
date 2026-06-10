@@ -22,10 +22,10 @@ import type { Palette } from '../types/song-analysis';
 import type { ParamSpec, SceneContext, VisualScene } from './scene';
 
 // Fixed half-res target; bloom hides the upscale.
-const RT_W = 960;
-const RT_H = 540;
+const RT_W = 1920;
+const RT_H = 1080;
 const FOLD_ITERS = 7;
-const MARCH_STEPS = 70;
+const MARCH_STEPS = 90;
 
 /**
  * Raymarched kaleidoscopic IFS (Knighty-style sierpinski fold with a

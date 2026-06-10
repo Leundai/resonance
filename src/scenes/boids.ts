@@ -191,7 +191,7 @@ export class Boids implements VisualScene {
             // tslMin's .d.ts is float-only; WGSL min(u32,u32) is valid.
             const n = (tslMin as unknown as (a: unknown, b: unknown) => ReturnType<typeof uint>)(
               countsPlain.element(cell),
-              uint(14),
+              uint(24),
             );
             Loop({ start: uint(0), end: n, type: 'uint' }, ({ i }) => {
               const other = sorted.element(start.add(i));
