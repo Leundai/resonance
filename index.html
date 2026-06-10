@@ -100,6 +100,13 @@
       #demo-btn:hover {
         background: rgba(178, 158, 255, 0.28);
       }
+      /* Tweakpane multiline monitors (director rationale): wrap, don't side-scroll. */
+      .tp-mllv_i {
+        white-space: pre-wrap !important;
+        word-break: break-word;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+      }
       #now-playing {
         position: fixed;
         left: 16px;
