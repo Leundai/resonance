@@ -13,6 +13,8 @@ export interface DirectorPlan {
   mood: string;
   scenePlan: { startSec: number; scene: string }[];
   configs: Record<string, ConductorConfig>;
+  /** Tokens spent on this call (from the API response). */
+  usage?: { input: number; output: number };
 }
 
 export interface SceneSpec {
@@ -27,6 +29,7 @@ const FEATURES: FeatureSource[] = [
   'treble',
   'centroid',
   'pulse',
+  'downbeatPulse',
   'beatPhase',
   'energyPercentile',
   'inhale',
@@ -69,7 +72,7 @@ SCENES and their tunable params [min,max]:
 ${sceneSpecs}
 
 FEATURES you can map from (all 0-1): ${FEATURES.join(', ')}.
-'pulse' fires each beat, 'inhale' ramps before a louder section, 'drop' fires on its impact.
+'pulse' fires each beat, 'downbeatPulse' on each bar's "1" (slower decay), 'inhale' ramps before a louder section, 'drop' fires on its impact.
 
 A mapping: {"feature":"bass","param":"breathe","in":[0,1],"out":[0,1],"curve":"linear|pow2|sqrt","attack":seconds,"release":seconds}.
 Pick scenes that fit each section's feel (terrain/physarum = calm, particles/attractor = mid, boids/fractal = intense — but trust your read of THIS song over the rule).
@@ -108,11 +111,18 @@ export async function requestDirectorPlan(
     const body = await res.text();
     throw new Error(`anthropic ${res.status}: ${body.slice(0, 140)}`);
   }
-  const data = (await res.json()) as { content: { type: string; text?: string }[] };
+  const data = (await res.json()) as {
+    content: { type: string; text?: string }[];
+    usage?: { input_tokens: number; output_tokens: number };
+  };
   const text = data.content.find((c) => c.type === 'text')?.text ?? '';
   const jsonText = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
   const raw = JSON.parse(jsonText) as DirectorPlan;
-  return validatePlan(raw, analysis, scenes);
+  const plan = validatePlan(raw, analysis, scenes);
+  if (data.usage) {
+    plan.usage = { input: data.usage.input_tokens, output: data.usage.output_tokens };
+  }
+  return plan;
 }
 
 /** Clamp and filter the model's output against the real scene specs. */

@@ -17,6 +17,8 @@ export interface FrameFeatures {
   centroid: number;
   /** True on the frame an onset/beat fires. */
   onset: boolean;
+  /** True on the frame a downbeat (the "1") fires. */
+  downbeat: boolean;
   /** Continuous 0..1 phase between beats; null when no beat grid. */
   beatPhase: number | null;
   /** Seconds until the next beat; null when unknown (live mode). */

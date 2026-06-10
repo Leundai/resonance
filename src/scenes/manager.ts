@@ -61,8 +61,8 @@ export class SceneManager {
     return this.scenes[this.activeIndex];
   }
 
-  get signals(): { pulse: number; inhale: number; drop: number } {
-    return this.conductor?.signals ?? { pulse: 0, inhale: 0, drop: 0 };
+  get signals(): { pulse: number; downbeat: number; inhale: number; drop: number } {
+    return this.conductor?.signals ?? { pulse: 0, downbeat: 0, inhale: 0, drop: 0 };
   }
 
   get activeIndexValue(): number {

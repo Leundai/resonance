@@ -26,6 +26,7 @@ export class FilePlayer implements AudioFeatureProvider {
 
   private analysis: SongAnalysis | null = null;
   private lastBeatIndex = -1;
+  private lastDownbeatIndex = -1;
   private sortedEnergy: Float32Array | null = null;
 
   constructor() {
@@ -55,6 +56,7 @@ export class FilePlayer implements AudioFeatureProvider {
     this.analysis = analysis;
     this.palette = analysis.palette;
     this.lastBeatIndex = -1;
+    this.lastDownbeatIndex = -1;
     this.sortedEnergy = Float32Array.from(analysis.curves.energy).sort();
   }
 
@@ -157,6 +159,7 @@ export class FilePlayer implements AudioFeatureProvider {
       treble: s.treble,
       centroid: s.centroid,
       onset: grid.onset,
+      downbeat: this.downbeatCrossing(t),
       beatPhase: grid.beatPhase,
       nextBeatIn: grid.nextBeatIn,
       energyPercentile: this.energyPercentile(t),
@@ -165,6 +168,23 @@ export class FilePlayer implements AudioFeatureProvider {
       nextSectionEnergy: grid.nextSectionEnergy,
       spectrum: this.spectrumOut,
     };
+  }
+
+  /** Fires true exactly once when t crosses a downbeat. */
+  private downbeatCrossing(t: number): boolean {
+    const downs = this.analysis?.downbeats;
+    if (!downs || downs.length === 0) return false;
+    let lo = 0;
+    let hi = downs.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (downs[mid] <= t) lo = mid;
+      else hi = mid - 1;
+    }
+    const idx = downs[lo] <= t ? lo : -1;
+    const fired = idx !== this.lastDownbeatIndex && idx >= 0 && t - downs[idx] < 0.1;
+    if (idx !== this.lastDownbeatIndex) this.lastDownbeatIndex = idx;
+    return fired;
   }
 
   private beatGrid(t: number): {

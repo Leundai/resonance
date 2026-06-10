@@ -14,6 +14,8 @@ export type FeatureSource =
   | 'pulse'
   | 'beatPhase'
   | 'energyPercentile'
+  /** 1 on each downbeat (the "1"), slower decay than pulse. */
+  | 'downbeatPulse'
   /** Ramps 0→1 in the ~1.2 s before a significantly louder section. */
   | 'inhale'
   /** Fires 1 the moment that louder section lands; fast decay. */
@@ -58,6 +60,7 @@ export class Conductor {
   private scene: VisualScene;
   private state: MappingState[] = [];
   private pulse = 0;
+  private downbeatPulse = 0;
   private inhale = 0;
   private drop = 0;
   private lastSectionStart = -1;
@@ -89,13 +92,20 @@ export class Conductor {
   }
 
   /** Derived signals, exposed for the post stack. */
-  get signals(): { pulse: number; inhale: number; drop: number } {
-    return { pulse: this.pulse, inhale: this.inhale, drop: this.drop };
+  get signals(): { pulse: number; downbeat: number; inhale: number; drop: number } {
+    return {
+      pulse: this.pulse,
+      downbeat: this.downbeatPulse,
+      inhale: this.inhale,
+      drop: this.drop,
+    };
   }
 
   update(f: FrameFeatures, dt: number): void {
     if (f.onset) this.pulse = 1;
     else this.pulse *= Math.exp(-dt * (this.config.pulseDecay ?? 5));
+    if (f.downbeat) this.downbeatPulse = 1;
+    else this.downbeatPulse *= Math.exp(-dt * 2.8);
 
     // Drop anticipation: a meaningfully louder section is imminent.
     const INHALE_WINDOW = 1.2;
@@ -155,6 +165,8 @@ export class Conductor {
         return f.centroid;
       case 'pulse':
         return this.pulse;
+      case 'downbeatPulse':
+        return this.downbeatPulse;
       case 'beatPhase':
         return f.beatPhase;
       case 'energyPercentile':

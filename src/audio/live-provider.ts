@@ -131,6 +131,7 @@ export class LiveProvider implements AudioFeatureProvider {
       treble: s.treble,
       centroid: s.centroid,
       onset,
+      downbeat: false,
       beatPhase: null,
       nextBeatIn: null,
       energyPercentile: null,

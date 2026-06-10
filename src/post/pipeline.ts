@@ -7,6 +7,7 @@ import type { FrameFeatures } from '../audio/features';
 
 export interface ConductorSignals {
   pulse: number;
+  downbeat: number;
   inhale: number;
   drop: number;
 }
@@ -53,9 +54,11 @@ export class PostStack {
 
     const drop = signals?.drop ?? 0;
     const inhale = signals?.inhale ?? 0;
+    const downbeat = signals?.downbeat ?? 0;
     setUniform(
       this.bloomNode.strength,
-      (0.2 + f.level * 0.3 + this.pulse * 0.25 + drop * 0.7) * (1 - inhale * 0.5),
+      (0.2 + f.level * 0.3 + this.pulse * 0.25 + downbeat * 0.22 + drop * 0.7) *
+        (1 - inhale * 0.5),
     );
     // Quiet music smears longer; loud music stays crisp.
     setUniform(this.afterNode.damp, 0.42 + (1 - Math.min(f.level * 2, 1)) * 0.18);

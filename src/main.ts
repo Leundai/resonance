@@ -49,7 +49,8 @@ const debugState = {
   frames: 0,
   onsetCount: 0,
   sceneName: '',
-  signals: { pulse: 0, inhale: 0, drop: 0 },
+  signals: { pulse: 0, downbeat: 0, inhale: 0, drop: 0 },
+  downbeatCount: 0,
   seek: null as ((sec: number) => void) | null,
   directorMood: '',
 };
@@ -66,6 +67,7 @@ function idleFeatures(t: number): FrameFeatures {
     treble: 0.08 + (1 - breathe) * 0.05,
     centroid: 0.4,
     onset: false,
+    downbeat: false,
     beatPhase: null,
     nextBeatIn: null,
     energyPercentile: null,
@@ -125,7 +127,8 @@ async function boot(): Promise<void> {
       if (token !== directorToken) return; // a newer track superseded us
       manager.applyDirectorPlan(plan);
       debugState.directorMood = plan.mood;
-      panel.setDirectorStatus(`✓ ${plan.mood}`);
+      const tok = plan.usage ? ` · ${plan.usage.input}→${plan.usage.output} tok` : '';
+      panel.setDirectorStatus(`✓ ${plan.mood}${tok}`);
     } catch (err) {
       if (token === directorToken) {
         panel.setDirectorStatus(`error: ${err instanceof Error ? err.message.slice(0, 60) : err}`);
@@ -281,6 +284,7 @@ async function boot(): Promise<void> {
 
   let last = performance.now();
   let elapsed = 0;
+  let cameraPunch = 0;
   let fpsSmooth = 60;
   let lastNowPlaying = '';
   renderer.setAnimationLoop(() => {
@@ -296,15 +300,19 @@ async function boot(): Promise<void> {
     manager.update(features, dt);
     debugState.features = features;
     if (features.onset) debugState.onsetCount++;
+    if (features.downbeat) debugState.downbeatCount++;
     debugState.playing = player?.isPlaying ?? false;
     debugState.time = player?.currentTime ?? 0;
     debugState.frames++;
     debugState.sceneName = manager.active.name;
 
+    // Downbeat camera punch: quick push-in, eased release.
+    if (features.downbeat) cameraPunch = 1;
+    cameraPunch *= Math.exp(-dt * 3.2);
     if (!manager.updateCamera(camera, elapsed, features)) {
       // Default slow orbit; level adds a subtle push-in.
       const t = elapsed * 0.04;
-      const radius = 22 - features.level * 4;
+      const radius = 22 - features.level * 4 - cameraPunch * 1.6;
       camera.position.set(Math.sin(t) * radius, Math.sin(t * 0.7) * 3, Math.cos(t) * radius);
       camera.lookAt(0, 0, 0);
     }
