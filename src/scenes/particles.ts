@@ -2,6 +2,8 @@ import * as THREE from 'three/webgpu';
 import {
   Fn,
   If,
+  atan,
+  cameraViewMatrix,
   color,
   float,
   hash,
@@ -12,7 +14,9 @@ import {
   smoothstep,
   uniform,
   uv,
+  vec2,
   vec3,
+  vec4,
 } from 'three/tsl';
 import type { FrameFeatures } from '../audio/features';
 import type { Palette } from '../types/song-analysis';
@@ -149,6 +153,14 @@ export class ParticleField implements VisualScene {
             .add(this.uBurst.mul(1.4)),
         );
       vel.addAssign(dir.mul(targetR.sub(len)).mul(0.6).mul(this.uDelta));
+      // Orbital swirl: the cloud turns like a nebula instead of sitting
+      // still as a ball; calm near the poles, drops spin it up.
+      const tangent = vec3(0, 1, 0).cross(dir);
+      vel.addAssign(
+        tangent.mul(this.uDrift.mul(1.6).add(this.uBurst.mul(4))).mul(this.uDelta),
+      );
+      // Gentle pull toward the equatorial plane flattens it disc-ward.
+      vel.addAssign(vec3(0, pos.y.negate().mul(0.05), 0).mul(this.uDelta));
       vel.mulAssign(float(0.985));
 
       pos.addAssign(vel.mul(this.uDelta).mul(float(1).add(this.uBreathe.mul(2.5))));
@@ -169,7 +181,8 @@ export class ParticleField implements VisualScene {
     material.positionNode = positions.toAttribute();
 
     const seedAttr = seeds.toAttribute();
-    const speed = velocities.toAttribute().length();
+    const velAttr = velocities.toAttribute();
+    const speed = velAttr.length();
     const mixT = smoothstep(0.0, 1.5, speed).add(seedAttr.mul(0.25)).clamp(0, 1);
     const brightness = this.uBrightness
       .add(this.uPulse.mul(0.7))
@@ -182,9 +195,18 @@ export class ParticleField implements VisualScene {
     material.opacityNode = smoothstep(0.5, 0.05, d)
       .mul(float(0.1).add(this.uBrightness.mul(0.16)))
       .mul(this.uFade);
-    material.scaleNode = float(0.08)
+    // Stretch fast particles along their screen-space velocity — slow
+    // ones stay soft dots, movers become silky streamlines.
+    const viewVel = cameraViewMatrix.mul(vec4(velAttr.x, velAttr.y, velAttr.z, 0)).xyz;
+    material.rotationNode = atan(viewVel.y, viewVel.x);
+    const stretch = smoothstep(0.3, 2.8, speed);
+    const baseScale = float(0.08)
       .add(seedAttr.mul(0.06))
       .mul(float(1).add(this.uBreathe.mul(1.2)).add(this.uPulse.mul(0.4)));
+    material.scaleNode = vec2(
+      baseScale.mul(float(1).add(stretch.mul(2.6))),
+      baseScale.mul(float(1).sub(stretch.mul(0.55))),
+    );
 
     const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), material, COUNT);
     mesh.frustumCulled = false;

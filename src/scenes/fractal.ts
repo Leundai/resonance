@@ -129,10 +129,13 @@ export class Fractal implements VisualScene {
       const cc = mix(vec2(this.uC.x, this.uC.y), p, this.uMode);
       const iter = float(0).toVar();
       const escaped = float(0).toVar();
+      // Orbit trap: closest approach to the origin, for interior shading.
+      const trap = float(1e9).toVar();
       Loop({ start: 0, end: MAX_ITER, type: 'int' }, () => {
         z.assign(
           vec2(z.x.mul(z.x).sub(z.y.mul(z.y)), z.x.mul(z.y).mul(2)).add(cc),
         );
+        trap.assign(trap.min(z.dot(z)));
         If(z.dot(z).greaterThan(6), () => {
           escaped.assign(1);
           Break();
@@ -154,10 +157,17 @@ export class Fractal implements VisualScene {
       // Thin glowing contour lines over a dim gradient — the classic
       // deep-zoom look; bloom does the rest.
       const line = float(1).sub(tri).pow(6);
-      const base = mix(this.uLow.mul(0.3), this.uHigh.mul(0.5), cyc);
+      // Alternate band families: every other band leans toward the peak
+      // hue, so the filaments carry two interleaved colors, not one.
+      const parity = smoothIter.div(7).add(this.uPhase).floor().mod(2);
+      const bandHue = mix(this.uHigh, mix(this.uHigh, this.uPeak, 0.6), parity);
+      const base = mix(this.uLow.mul(0.3), bandHue.mul(0.5), cyc);
       const escapedColor = base.add(this.uPeak.mul(line).mul(0.85)).mul(vis).mul(0.55);
-      // Interior of the set stays near-black for contrast.
-      const c = mix(this.uLow.mul(0.1), escapedColor, escaped);
+      // Interior: orbit-trap glow — veins where orbits graze the origin
+      // instead of a flat black hole in the composition.
+      const trapGlow = smoothstep(0.5, 0.0, trap.sqrt());
+      const interior = this.uLow.mul(0.1).add(this.uHigh.mul(trapGlow.pow(2)).mul(0.35));
+      const c = mix(interior, escapedColor, escaped);
       return c.mul(this.uBrightness).mul(this.uFade);
     })();
 
